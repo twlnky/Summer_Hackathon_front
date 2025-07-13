@@ -1,36 +1,140 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Система управления персоналом - Frontend
 
-## Getting Started
+Frontend приложение для системы управления персоналом и департаментами, созданное на основе Java Spring Boot backend.
 
-First, run the development server:
+## Технологии
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Next.js 15** - React фреймворк для веб-приложений
+- **TypeScript** - Типизированный JavaScript
+- **Material-UI (MUI)** - Библиотека компонентов UI
+- **Axios** - HTTP клиент для API запросов
+- **js-cookie** - Работа с cookies для JWT токенов
+
+## Функциональность
+
+### Аутентификация
+- Регистрация пользователей
+- Авторизация с JWT токенами
+- Автоматическое сохранение токенов в cookies
+- Защищенные маршруты
+
+### Управление пользователями
+- Просмотр списка пользователей с пагинацией
+- Фильтрация по имени, фамилии, отчеству
+- Создание новых пользователей (требует аутентификации)
+- Редактирование существующих пользователей (требует аутентификации)
+- Удаление пользователей (требует аутентификации)
+
+### Управление департаментами
+- Просмотр списка департаментов
+- Просмотр сотрудников в каждом департаменте
+- Создание новых департаментов (требует аутентификации)
+- Редактирование департаментов (требует аутентификации)
+- Удаление департаментов (требует аутентификации)
+
+### Поиск
+- Глобальный поиск по пользователям и департаментам
+- Поиск с пагинацией
+- Автоматический поиск при вводе (debounce)
+
+## Структура проекта
+
+```
+app/
+├── components/          # Переиспользуемые компоненты
+│   ├── AppBar.tsx      # Навигационная панель
+│   ├── LoginForm.tsx   # Форма входа
+│   ├── RegisterForm.tsx # Форма регистрации
+│   ├── SearchComponent.tsx # Компонент поиска
+│   ├── UserManagement.tsx # Управление пользователями
+│   └── DepartmentManagement.tsx # Управление департаментами
+├── contexts/           # React контексты
+│   └── AuthContext.tsx # Контекст аутентификации
+├── services/           # API сервисы
+│   ├── api.ts          # Базовый HTTP клиент
+│   ├── authService.ts  # Сервис аутентификации
+│   ├── userService.ts  # Сервис пользователей
+│   ├── departmentService.ts # Сервис департаментов
+│   └── searchService.ts # Сервис поиска
+├── types/              # TypeScript типы
+│   └── index.ts        # Основные типы данных
+├── login/              # Страница входа
+├── register/           # Страница регистрации
+├── layout.tsx          # Корневой layout
+└── page.tsx            # Главная страница
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## API Endpoints
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Приложение взаимодействует с следующими backend endpoints:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Аутентификация
+- `POST /api/v1/auth/login` - Авторизация
+- `POST /api/v1/auth/registration` - Регистрация
 
-## Learn More
+### Пользователи
+- `GET /api/v1/users` - Получение списка пользователей
+- `GET /api/v1/users/public/{id}` - Получение пользователя по ID
+- `POST /api/v1/users` - Создание пользователя
+- `PUT /api/v1/users/{id}` - Обновление пользователя
+- `DELETE /api/v1/users/{id}` - Удаление пользователя
 
-To learn more about Next.js, take a look at the following resources:
+### Департаменты
+- `GET /api/v1/departments/public` - Получение списка департаментов
+- `GET /api/v1/departments/public/{id}` - Получение департамента по ID
+- `GET /api/v1/departments/public/{id}/users` - Получение пользователей департамента
+- `POST /api/v1/departments` - Создание департамента
+- `PUT /api/v1/departments/{id}` - Обновление департамента
+- `DELETE /api/v1/departments/{id}` - Удаление департамента
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Поиск
+- `GET /api/v1/search` - Глобальный поиск
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Установка и запуск
 
-## Deploy on Vercel
+1. Установка зависимостей:
+```bash
+npm install
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+2. Запуск в режиме разработки:
+```bash
+npm run dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+3. Сборка для продакшена:
+```bash
+npm run build
+```
+
+4. Запуск продакшен сборки:
+```bash
+npm start
+```
+
+## Конфигурация
+
+### API URL
+Базовый URL для API настроен в файле `app/services/api.ts`:
+```typescript
+const BASE_URL = 'http://localhost:8080/api/v1';
+```
+
+### Аутентификация
+JWT токены сохраняются в cookies с настройками:
+- Срок действия: 7 дней
+- Secure: только в production
+- SameSite: strict
+
+## Особенности реализации
+
+1. **Только Material-UI компоненты** - Не используются собственные стили, только компоненты MUI
+2. **JWT в cookies** - Токены сохраняются в cookies с `withCredentials: true`
+3. **Многоиспользуемые компоненты** - Все компоненты разделены на переиспользуемые модули
+4. **Типизация** - Полная типизация TypeScript на основе Java DTO классов
+5. **Автоматический редирект** - При 401 ошибке автоматический редирект на страницу входа
+6. **Responsive дизайн** - Адаптивный дизайн для мобильных устройств
+
+## Требования к backend
+
+Backend должен поддерживать CORS запросы и принимать cookies для аутентификации. Все endpoints должны возвращать данные в формате, соответствующем типам TypeScript в `app/types/index.ts`.
