@@ -37,17 +37,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const token = AuthService.getToken();
     if (token) {
       setIsAuthenticated(true);
-      // Здесь можно добавить запрос для получения информации о пользователе
-      // если такой endpoint есть в backend
+      // Пытаемся получить информацию о пользователе из localStorage
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        try {
+          setUser(JSON.parse(userData));
+        } catch (e) {
+          console.error('Ошибка при парсинге данных пользователя:', e);
+        }
+      }
     }
     setLoading(false);
   }, []);
 
   const login = async (authData: AuthData): Promise<void> => {
     try {
-      await AuthService.login(authData);
+      const response = await AuthService.login(authData);
       setIsAuthenticated(true);
-      // Здесь можно добавить запрос для получения информации о пользователе
+      
+      // Сохраняем информацию о пользователе из ответа
+      if (response.user) {
+        setUser(response.user);
+        localStorage.setItem('user', JSON.stringify(response.user));
+      } else {
+        // ВРЕМЕННОЕ РЕШЕНИЕ: Создаем тестового админа
+        // TODO: Удалить когда backend будет возвращать информацию о пользователе
+        const testUser: User = {
+          id: 1,
+          firstName: 'Admin',
+          lastName: 'User',
+          email: authData.username,
+          role: 'ADMIN',
+          moderatorId: null,
+          departmentsIds: []
+        };
+        setUser(testUser);
+        localStorage.setItem('user', JSON.stringify(testUser));
+        console.log('ВРЕМЕННОЕ РЕШЕНИЕ: Создан тестовый админ', testUser);
+      }
     } catch (error) {
       throw error;
     }
@@ -67,6 +94,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     AuthService.logout();
     setIsAuthenticated(false);
     setUser(null);
+    localStorage.removeItem('user');
   };
 
   const value: AuthContextType = {

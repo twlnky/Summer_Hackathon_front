@@ -73,10 +73,23 @@ const SearchComponent: React.FC = () => {
         </Avatar>
       </ListItemAvatar>
       <ListItemText
-        primary={`${user.firstName} ${user.lastName} ${user.middleName || ''}`}
+        primary={`${user.firstName || ''} ${user.lastName || ''} ${user.middleName || ''}`}
         secondary={
           <Box>
-            <Typography variant="body2" color="text.secondary">
+            <Typography 
+              variant="body2" 
+              color="text.secondary"
+              component="a"
+              href={`mailto:${user.email}`}
+              sx={{ 
+                textDecoration: 'none',
+                color: 'inherit',
+                '&:hover': {
+                  color: 'primary.main',
+                  cursor: 'pointer'
+                }
+              }}
+            >
               {user.email}
             </Typography>
             {user.position && (
@@ -85,7 +98,20 @@ const SearchComponent: React.FC = () => {
               </Typography>
             )}
             {user.personalPhone && (
-              <Typography variant="body2" color="text.secondary">
+              <Typography 
+                variant="body2" 
+                color="text.secondary"
+                component="a"
+                href={`tel:${user.personalPhone}`}
+                sx={{ 
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  '&:hover': {
+                    color: 'primary.main',
+                    cursor: 'pointer'
+                  }
+                }}
+              >
                 {user.personalPhone}
               </Typography>
             )}

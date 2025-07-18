@@ -7,20 +7,44 @@ export class DepartmentService {
     pageParam: PageParam = { page: 0, size: 10 },
     sortParam: SortParam = { sortBy: ['id:asc'] }
   ): Promise<PageResult<Department>> {
-    const params = new URLSearchParams();
-    
-    // Добавляем фильтры
-    if (departmentFilter.name) params.append('name', departmentFilter.name);
-    
-    // Добавляем пагинацию
-    params.append('page', pageParam.page.toString());
-    params.append('size', pageParam.size.toString());
-    
-    // Добавляем сортировку
-    sortParam.sortBy.forEach(sort => params.append('sortBy', sort));
-    
-    const response = await apiClient.get<PageResult<Department>>(`/departments/public?${params.toString()}`);
-    return response.data;
+    try {
+      const params = new URLSearchParams();
+      
+      // Добавляем фильтры
+      if (departmentFilter.name) params.append('name', departmentFilter.name);
+      if (departmentFilter.id) params.append('id', departmentFilter.id.toString());
+      
+      // Добавляем пагинацию
+      params.append('page', pageParam.page.toString());
+      params.append('size', pageParam.size.toString());
+      
+      // Добавляем сортировку
+      sortParam.sortBy.forEach(sort => params.append('sortBy', sort));
+      
+      const url = `/departments/public?${params.toString()}`;
+      console.log('Fetching departments from:', url);
+      
+      const response = await apiClient.get<PageResult<Department>>(url);
+      console.log('Departments response:', response.data);
+      
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching departments:', error);
+      
+      if (error.response?.status === 401) {
+        // Если публичный API департаментов тоже требует авторизацию, возвращаем пустой результат
+        return {
+          queryResult: [],
+          pageCount: 0,
+          pageSize: pageParam.size,
+          total: 0,
+          currentPage: pageParam.page,
+          totalElements: 0
+        };
+      }
+      
+      throw error;
+    }
   }
 
   static async getDepartmentById(id: number): Promise<Department> {
@@ -48,8 +72,31 @@ export class DepartmentService {
     // Добавляем сортировку
     sortParam.sortBy.forEach(sort => params.append('sortBy', sort));
     
-    const response = await apiClient.get<PageResult<User>>(`/departments/public/${departmentId}/users?${params.toString()}`);
-    return response.data;
+    // Добавляем timestamp для предотвращения кэширования
+    params.append('_t', Date.now().toString());
+
+    const url = `/departments/public/${departmentId}/users?${params.toString()}`;
+    console.log('getUsersByDepartment: Запрос к URL:', url);
+
+    try {
+      const response = await apiClient.get<PageResult<User>>(url);
+      console.log('getUsersByDepartment: Успешный ответ:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('getUsersByDepartment: Ошибка запроса:', error);
+      if (error.response?.status === 401) {
+        // Если API требует авторизацию, возвращаем пустой результат
+        return {
+          queryResult: [],
+          pageCount: 0,
+          pageSize: pageParam.size,
+          total: 0,
+          currentPage: pageParam.page,
+          totalElements: 0
+        };
+      }
+      throw error;
+    }
   }
 
   static async createDepartment(departmentData: Omit<Department, 'id'>): Promise<Department> {
@@ -65,6 +112,27 @@ export class DepartmentService {
   static async deleteDepartment(id: number): Promise<void> {
     await apiClient.delete(`/departments/${id}`);
   }
+
+  // Добавить пользователя в департамент
+  static async addUserToDepartment(departmentId: number, userId: number): Promise<void> {
+    const url = `/departments/${departmentId}/users/${userId}`;
+    console.log('DepartmentService.addUserToDepartment - отправляем POST запрос на:', url);
+    console.log('Параметры:', { departmentId, userId });
+    
+    try {
+      const response = await apiClient.post(url);
+      console.log('DepartmentService.addUserToDepartment - успешный ответ:', response.status);
+      return response.data;
+    } catch (error: any) {
+      console.error('DepartmentService.addUserToDepartment - ошибка:', error);
+      throw error;
+    }
+  }
+
+  // Удалить пользователя из департамента
+  static async removeUserFromDepartment(departmentId: number, userId: number): Promise<void> {
+    await apiClient.delete(`/departments/${departmentId}/users/${userId}`);
+  }
 }
 
-export default DepartmentService; 
+export default DepartmentService;

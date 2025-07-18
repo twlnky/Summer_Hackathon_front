@@ -7,7 +7,7 @@ const BASE_URL = 'http://localhost:8080/api/v1';
 // Создание axios экземпляра с базовой конфигурацией
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
-  withCredentials: true,  // Включаем отправку cookies
+  withCredentials: false,  // Отключаем cookies чтобы избежать CORS проблем с публичными endpoints
   headers: {
     'Content-Type': 'application/json',
   },
@@ -34,8 +34,10 @@ apiClient.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
+      // Удаляем токен, но НЕ редиректим автоматически
       Cookies.remove('access_token');
-      window.location.href = '/login';
+      // Только для защищенных операций редиректим на логин
+      // Анонимные пользователи могут продолжать просмотр
     }
     return Promise.reject(error);
   }

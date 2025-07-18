@@ -12,10 +12,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemAvatar,
   Avatar,
   IconButton,
   Chip,
@@ -33,7 +29,7 @@ import {
   Phone,
   Business,
 } from '@mui/icons-material';
-import { User, UserFilter, PageResult } from '../types';
+import { User, PageResult } from '../types';
 import UserService from '../services/userService';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -41,7 +37,7 @@ const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<PageResult<User> | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
-  const [filter, setFilter] = useState<UserFilter>({});
+  const [clientSearchQuery, setClientSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
@@ -55,12 +51,17 @@ const UserManagement: React.FC = () => {
     setError('');
 
     try {
-      const response = await UserService.getUsers(filter, {
-        page: currentPage - 1,
-        size: 10,
+      // Если есть поисковый запрос, загружаем больше данных для клиентской фильтрации
+      const pageSize = clientSearchQuery ? 100 : 10;
+      const targetPage = clientSearchQuery ? 0 : currentPage - 1;
+      
+      const response = await UserService.getUsers({}, {
+        page: targetPage,
+        size: pageSize,
       });
       setUsers(response);
     } catch (err: any) {
+      console.error('Ошибка при загрузке пользователей:', err);
       setError(err.response?.data?.message || 'Ошибка при загрузке пользователей');
     } finally {
       setLoading(false);
@@ -69,16 +70,18 @@ const UserManagement: React.FC = () => {
 
   useEffect(() => {
     fetchUsers(page);
-  }, [filter, page]);
+  }, [page]);
 
-  const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFilter(prev => ({
-      ...prev,
-      [name]: value || undefined,
-    }));
-    setPage(1);
-  };
+  // Сброс страницы при изменении поискового запроса и перезагрузка данных
+  useEffect(() => {
+    if (clientSearchQuery) {
+      setPage(1);
+      fetchUsers(1);
+    } else {
+      // Когда поиск очищается, возвращаемся к обычной пагинации
+      fetchUsers(page);
+    }
+  }, [clientSearchQuery]);
 
   const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
     setPage(value);
@@ -95,7 +98,7 @@ const UserManagement: React.FC = () => {
       personalPhone: '',
       officeNumber: 0,
       note: '',
-      moderatorId: 1,
+      moderatorId: null, // Изменено с 1 на null
       departmentsIds: [],
     });
     setIsEditing(!!user);
@@ -145,58 +148,110 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  // Клиентская фильтрация пользователей
+  const filteredUsers = users?.queryResult.filter(user => {
+    if (!clientSearchQuery) return true;
+    const query = clientSearchQuery.toLowerCase();
+    return (
+      user.firstName?.toLowerCase().includes(query) ||
+      user.lastName?.toLowerCase().includes(query) ||
+      user.middleName?.toLowerCase().includes(query) ||
+      user.email?.toLowerCase().includes(query) ||
+      user.position?.toLowerCase().includes(query)
+    );
+  }) || [];
+
   const renderUser = (user: User) => (
-    <ListItem
-      key={user.id}
-      secondaryAction={
-        isAuthenticated && (
-          <Box>
-            <IconButton onClick={() => handleOpenDialog(user)}>
-              <Edit />
-            </IconButton>
-            <IconButton onClick={() => handleDelete(user.id)} color="error">
-              <Delete />
-            </IconButton>
-          </Box>
-        )
-      }
-    >
-      <ListItemAvatar>
-        <Avatar>
-          <Person />
-        </Avatar>
-      </ListItemAvatar>
-      <ListItemText
-        primary={`${user.firstName} ${user.lastName} ${user.middleName || ''}`}
-        secondary={
-          <Box>
+    <Card key={user.id} sx={{ mb: 2 }}>
+      <CardContent>
+        <Box display="flex" alignItems="flex-start" gap={2}>
+          <Avatar sx={{ mt: 0.5 }}>
+            <Person />
+          </Avatar>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="h6" gutterBottom>
+              {`${user.firstName || ''} ${user.lastName || ''} ${user.middleName || ''}`.trim()}
+            </Typography>
+            
             <Box display="flex" alignItems="center" gap={1} mb={1}>
-              <Email fontSize="small" />
-              <Typography variant="body2">{user.email}</Typography>
+              <Email fontSize="small" color="action" />
+              <Typography 
+                variant="body2"
+                component="a"
+                href={`mailto:${user.email}`}
+                sx={{ 
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  '&:hover': {
+                    color: 'primary.main',
+                    cursor: 'pointer'
+                  }
+                }}
+              >
+                {user.email}
+              </Typography>
             </Box>
+            
             {user.position && (
               <Box display="flex" alignItems="center" gap={1} mb={1}>
-                <Business fontSize="small" />
+                <Business fontSize="small" color="action" />
                 <Typography variant="body2">{user.position}</Typography>
               </Box>
             )}
+            
             {user.personalPhone && (
               <Box display="flex" alignItems="center" gap={1} mb={1}>
-                <Phone fontSize="small" />
-                <Typography variant="body2">{user.personalPhone}</Typography>
+                <Phone fontSize="small" color="action" />
+                <Typography 
+                  variant="body2"
+                  component="a"
+                  href={`tel:${user.personalPhone}`}
+                  sx={{ 
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    '&:hover': {
+                      color: 'primary.main',
+                      cursor: 'pointer'
+                    }
+                  }}
+                >
+                  {user.personalPhone}
+                </Typography>
               </Box>
             )}
+            
             {user.officeNumber && (
-              <Chip
-                label={`Офис: ${user.officeNumber}`}
-                size="small"
-                variant="outlined"
-              />
+              <Box mt={1}>
+                <Chip
+                  label={`Офис: ${user.officeNumber}`}
+                  size="small"
+                  variant="outlined"
+                />
+              </Box>
             )}
           </Box>
-        }
-      />
-    </ListItem>
+          
+          {isAuthenticated && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <IconButton 
+                size="small" 
+                onClick={() => handleOpenDialog(user)}
+                sx={{ color: 'primary.main' }}
+              >
+                <Edit />
+              </IconButton>
+              <IconButton 
+                size="small" 
+                onClick={() => handleDelete(user.id)} 
+                sx={{ color: 'error.main' }}
+              >
+                <Delete />
+              </IconButton>
+            </Box>
+          )}
+        </Box>
+      </CardContent>
+    </Card>
   );
 
   return (
@@ -216,53 +271,48 @@ const UserManagement: React.FC = () => {
         )}
       </Box>
 
+      {/* Уведомление для неавторизованных пользователей */}
+      {!isAuthenticated && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <Typography variant="body1">
+            Вы просматриваете список пользователей в режиме только для чтения. 
+            Войдите в систему для управления пользователями.
+          </Typography>
+        </Alert>
+      )}
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
 
-      {/* Фильтры */}
+      {/* Поиск в реальном времени */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Фильтры
+            Быстрый поиск
           </Typography>
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: { xs: 'column', md: 'row' },
-              gap: 2
+          <TextField
+            fullWidth
+            variant="outlined"
+            placeholder="Поиск по имени, фамилии, отчеству, email или должности..."
+            value={clientSearchQuery}
+            onChange={(e) => setClientSearchQuery(e.target.value)}
+            sx={{ mb: 2 }}
+            InputProps={{
+              startAdornment: (
+                <Box sx={{ mr: 1, display: 'flex', alignItems: 'center' }}>
+                  <Person sx={{ color: 'action.active' }} />
+                </Box>
+              )
             }}
-          >
-            <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 33.33%' } }}>
-              <TextField
-                fullWidth
-                name="firstName"
-                label="Имя"
-                value={filter.firstName || ''}
-                onChange={handleFilterChange}
-              />
-            </Box>
-            <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 33.33%' } }}>
-              <TextField
-                fullWidth
-                name="lastName"
-                label="Фамилия"
-                value={filter.lastName || ''}
-                onChange={handleFilterChange}
-              />
-            </Box>
-            <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 33.33%' } }}>
-              <TextField
-                fullWidth
-                name="middleName"
-                label="Отчество"
-                value={filter.middleName || ''}
-                onChange={handleFilterChange}
-              />
-            </Box>
-          </Box>
+          />
+          {clientSearchQuery && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Найдено результатов: {filteredUsers.length}
+            </Typography>
+          )}
         </CardContent>
       </Card>
 
@@ -271,18 +321,25 @@ const UserManagement: React.FC = () => {
         <Box display="flex" justifyContent="center" my={3}>
           <CircularProgress />
         </Box>
-      ) : (
-        <Card>
-          <CardContent>
-            <List>
-              {users?.queryResult.map((user) => renderUser(user))}
-            </List>
+      ) : filteredUsers.length === 0 ? (
+        <Card sx={{ mb: 3 }}>
+          <CardContent sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="h6" color="text.secondary">
+              {clientSearchQuery 
+                ? `Не найдено пользователей по запросу "${clientSearchQuery}"` 
+                : 'Пользователи не найдены'
+              }
+            </Typography>
           </CardContent>
         </Card>
+      ) : (
+        <Box>
+          {filteredUsers.map((user) => renderUser(user))}
+        </Box>
       )}
 
-      {/* Пагинация */}
-      {users && users.pageCount > 1 && (
+      {/* Пагинация - скрываем при поиске */}
+      {users && users.pageCount > 1 && !clientSearchQuery && (
         <Box display="flex" justifyContent="center" mt={3}>
           <Pagination
             count={users.pageCount}
@@ -423,4 +480,4 @@ const UserManagement: React.FC = () => {
   );
 };
 
-export default UserManagement; 
+export default UserManagement;

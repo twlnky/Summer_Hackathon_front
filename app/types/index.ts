@@ -7,15 +7,24 @@ export interface User {
   personalPhone?: string;
   position?: string;
   note?: string;
-  moderatorId: number;
+  moderatorId: number | null;
   email: string;
   departmentsIds: number[];
+  role?: 'USER' | 'MODERATOR' | 'ADMIN';
 }
 
 export interface Department {
   id: number;
   name: string;
   moderatorId?: number;
+  moderatorLogin?: string;
+  moderatorFirstName?: string;
+  moderatorLastName?: string;
+  moderatorMiddleName?: string;
+  moderator?: User;
+  tag?: string;
+  description?: string;
+  userCount?: number;
 }
 
 export interface AuthData {
@@ -32,6 +41,7 @@ export interface RegisterData {
 
 export interface JWTResponse {
   accessToken: string;
+  user?: User; // Добавляем опциональное поле пользователя
 }
 
 export interface SearchResponse {
@@ -48,11 +58,14 @@ export interface PageParam {
 export interface PageResult<T> {
   queryResult: T[];
   pageCount: number;
-  currentPage: number;
-  totalElements: number;
+  pageSize?: number;
+  total?: number;
+  currentPage?: number;
+  totalElements?: number;
 }
 
 export interface UserFilter {
+  id?: number;
   firstName?: string;
   lastName?: string;
   middleName?: string;
@@ -60,6 +73,7 @@ export interface UserFilter {
 
 export interface DepartmentFilter {
   name?: string;
+  id?: number;
 }
 
 export interface SortParam {

@@ -207,18 +207,32 @@ const DepartmentManagement: React.FC = () => {
                   <ListItem key={user.id}>
                     <ListItemAvatar>
                       <Avatar>
-                        {user.firstName.charAt(0)}
+                        {user.firstName?.charAt(0) || '?'}
                       </Avatar>
                     </ListItemAvatar>
                     <ListItemText
-                      primary={`${user.firstName} ${user.lastName} ${user.middleName || ''}`}
+                      primary={`${user.firstName || ''} ${user.lastName || ''} ${user.middleName || ''}`}
                       secondary={
                         <Box>
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography 
+                            variant="body2" 
+                            color="text.secondary" 
+                            component="a" 
+                            href={`mailto:${user.email}`}
+                            sx={{ 
+                              display: 'block',
+                              textDecoration: 'none',
+                              color: 'inherit',
+                              '&:hover': {
+                                color: 'primary.main',
+                                cursor: 'pointer'
+                              }
+                            }}
+                          >
                             {user.email}
                           </Typography>
                           {user.position && (
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography variant="body2" color="text.secondary" component="span" sx={{ display: 'block' }}>
                               {user.position}
                             </Typography>
                           )}
@@ -257,6 +271,16 @@ const DepartmentManagement: React.FC = () => {
           </Button>
         )}
       </Box>
+
+      {/* Уведомление для неавторизованных пользователей */}
+      {!isAuthenticated && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <Typography variant="body1">
+            Вы просматриваете список департаментов в режиме только для чтения. 
+            Войдите в систему для управления департаментами.
+          </Typography>
+        </Alert>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -347,4 +371,4 @@ const DepartmentManagement: React.FC = () => {
   );
 };
 
-export default DepartmentManagement; 
+export default DepartmentManagement;
