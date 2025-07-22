@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -8,474 +9,450 @@ import {
   Card,
   CardContent,
   TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Avatar,
-  IconButton,
   Chip,
   Alert,
   CircularProgress,
   Pagination,
-  Fab,
+  InputAdornment,
+  Container,
 } from '@mui/material';
 import {
   Person,
-  Edit,
-  Delete,
   Add,
   Email,
   Phone,
   Business,
+  Search,
 } from '@mui/icons-material';
 import { User, PageResult } from '../types';
 import UserService from '../services/userService';
+import CurrentUserService from '../services/currentUserService';
 import { useAuth } from '../contexts/AuthContext';
 
 const UserManagement: React.FC = () => {
+  console.log('UserManagement компонент рендерится!'); // Отладочная информация
+  
+  const router = useRouter();
+  const { isAuthenticated, user: currentUser } = useAuth();
   const [users, setUsers] = useState<PageResult<User> | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
-  const [clientSearchQuery, setClientSearchQuery] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [dialogOpen, setDialogOpen] = useState<boolean>(false);
-  const [formData, setFormData] = useState<Partial<User>>({});
-  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [canManageUsers, setCanManageUsers] = useState<boolean>(false);
 
-  const { isAuthenticated } = useAuth();
+  const pageSize = 12; // Показываем 12 карточек на странице
 
-  const fetchUsers = async (currentPage: number = 1) => {
+  const checkUserPermissions = async () => {
+    if (isAuthenticated && currentUser) {
+      try {
+        const currentUserData = await CurrentUserService.getCurrentUser();
+        setCanManageUsers(currentUserData.role === 'ADMIN' || currentUserData.role === 'MODERATOR');
+      } catch (error) {
+        console.error('Ошибка при проверке прав:', error);
+        setCanManageUsers(false);
+      }
+    }
+  };
+
+  const fetchUsers = useCallback(async () => {
+    console.log('UserManagement: Начинаем загрузку пользователей...'); // Отладочная информация
     setLoading(true);
     setError('');
-
     try {
-      // Если есть поисковый запрос, загружаем больше данных для клиентской фильтрации
-      const pageSize = clientSearchQuery ? 100 : 10;
-      const targetPage = clientSearchQuery ? 0 : currentPage - 1;
-      
-      const response = await UserService.getUsers({}, {
-        page: targetPage,
-        size: pageSize,
-      });
-      setUsers(response);
+      const result = await UserService.getUsers(
+        { globalSearch: debouncedSearchQuery }, // Используем debouncedSearchQuery
+        { page: page - 1, size: pageSize }, // Пагинация
+        { sortBy: ['id:asc'] } // Сортировка
+      );
+      console.log('UserManagement: Пользователи загружены:', result); // Отладочная информация
+      setUsers(result);
     } catch (err: any) {
       console.error('Ошибка при загрузке пользователей:', err);
       setError(err.response?.data?.message || 'Ошибка при загрузке пользователей');
     } finally {
       setLoading(false);
     }
+  }, [debouncedSearchQuery, page, pageSize]); // Добавляем зависимости
+
+  // Debounce для поискового запроса
+  useEffect(() => {
+    console.log('UserManagement: Запущен debounce таймер для:', searchQuery);
+    const timer = setTimeout(() => {
+      console.log('UserManagement: Debounce завершен, устанавливаем debouncedSearchQuery:', searchQuery);
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // Задержка 500ms
+
+    return () => {
+      console.log('UserManagement: Debounce таймер отменен');
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    checkUserPermissions();
+  }, [isAuthenticated, currentUser]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]); // Теперь зависим только от fetchUsers
+
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(event.target.value);
+    setPage(1); // Сброс на первую страницу при поиске
   };
-
-  useEffect(() => {
-    fetchUsers(page);
-  }, [page]);
-
-  // Сброс страницы при изменении поискового запроса и перезагрузка данных
-  useEffect(() => {
-    if (clientSearchQuery) {
-      setPage(1);
-      fetchUsers(1);
-    } else {
-      // Когда поиск очищается, возвращаемся к обычной пагинации
-      fetchUsers(page);
-    }
-  }, [clientSearchQuery]);
 
   const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
     setPage(value);
   };
 
-  const handleOpenDialog = (user?: User) => {
-    setSelectedUser(user || null);
-    setFormData(user || {
-      firstName: '',
-      lastName: '',
-      middleName: '',
-      email: '',
-      position: '',
-      personalPhone: '',
-      officeNumber: 0,
-      note: '',
-      moderatorId: null, // Изменено с 1 на null
-      departmentsIds: [],
-    });
-    setIsEditing(!!user);
-    setDialogOpen(true);
+  const handleViewUser = (userId: number, event: React.MouseEvent) => {
+    console.log('UserManagement: Кликнули по карточке пользователя с ID:', userId); // Отладочная информация
+    console.log('UserManagement: Event:', event); // Отладочная информация
+    event.preventDefault();
+    event.stopPropagation();
+    console.log('UserManagement: Переходим на /users/' + userId); // Отладочная информация
+    router.push(`/users/${userId}`);
   };
 
-  const handleCloseDialog = () => {
-    setDialogOpen(false);
-    setSelectedUser(null);
-    setFormData({});
-    setIsEditing(false);
+  const handleAddUser = () => {
+    router.push('/users/add');
   };
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'number' ? parseInt(value) || 0 : value,
-    }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    try {
-      if (isEditing && selectedUser) {
-        await UserService.updateUser(selectedUser.id, formData);
-      } else {
-        await UserService.createUser(formData as Omit<User, 'id'>);
-      }
-      handleCloseDialog();
-      fetchUsers(page);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Ошибка при сохранении пользователя');
+  const getRoleColor = (role: string): 'error' | 'warning' | 'success' => {
+    switch (role) {
+      case 'ADMIN':
+        return 'error';
+      case 'MODERATOR':
+        return 'warning';
+      default:
+        return 'success';
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (window.confirm('Вы уверены, что хотите удалить этого пользователя?')) {
-      try {
-        await UserService.deleteUser(id);
-        fetchUsers(page);
-      } catch (err: any) {
-        setError(err.response?.data?.message || 'Ошибка при удалении пользователя');
-      }
+  const getRoleLabel = (role: string): string => {
+    switch (role) {
+      case 'ADMIN':
+        return 'Администратор';
+      case 'MODERATOR':
+        return 'Модератор';
+      default:
+        return 'Пользователь';
     }
   };
-
-  // Клиентская фильтрация пользователей
-  const filteredUsers = users?.queryResult.filter(user => {
-    if (!clientSearchQuery) return true;
-    const query = clientSearchQuery.toLowerCase();
-    return (
-      user.firstName?.toLowerCase().includes(query) ||
-      user.lastName?.toLowerCase().includes(query) ||
-      user.middleName?.toLowerCase().includes(query) ||
-      user.email?.toLowerCase().includes(query) ||
-      user.position?.toLowerCase().includes(query)
-    );
-  }) || [];
-
-  const renderUser = (user: User) => (
-    <Card key={user.id} sx={{ mb: 2 }}>
-      <CardContent>
-        <Box display="flex" alignItems="flex-start" gap={2}>
-          <Avatar sx={{ mt: 0.5 }}>
-            <Person />
-          </Avatar>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="h6" gutterBottom>
-              {`${user.firstName || ''} ${user.lastName || ''} ${user.middleName || ''}`.trim()}
-            </Typography>
-            
-            <Box display="flex" alignItems="center" gap={1} mb={1}>
-              <Email fontSize="small" color="action" />
-              <Typography 
-                variant="body2"
-                component="a"
-                href={`mailto:${user.email}`}
-                sx={{ 
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  '&:hover': {
-                    color: 'primary.main',
-                    cursor: 'pointer'
-                  }
-                }}
-              >
-                {user.email}
-              </Typography>
-            </Box>
-            
-            {user.position && (
-              <Box display="flex" alignItems="center" gap={1} mb={1}>
-                <Business fontSize="small" color="action" />
-                <Typography variant="body2">{user.position}</Typography>
-              </Box>
-            )}
-            
-            {user.personalPhone && (
-              <Box display="flex" alignItems="center" gap={1} mb={1}>
-                <Phone fontSize="small" color="action" />
-                <Typography 
-                  variant="body2"
-                  component="a"
-                  href={`tel:${user.personalPhone}`}
-                  sx={{ 
-                    textDecoration: 'none',
-                    color: 'inherit',
-                    '&:hover': {
-                      color: 'primary.main',
-                      cursor: 'pointer'
-                    }
-                  }}
-                >
-                  {user.personalPhone}
-                </Typography>
-              </Box>
-            )}
-            
-            {user.officeNumber && (
-              <Box mt={1}>
-                <Chip
-                  label={`Офис: ${user.officeNumber}`}
-                  size="small"
-                  variant="outlined"
-                />
-              </Box>
-            )}
-          </Box>
-          
-          {isAuthenticated && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <IconButton 
-                size="small" 
-                onClick={() => handleOpenDialog(user)}
-                sx={{ color: 'primary.main' }}
-              >
-                <Edit />
-              </IconButton>
-              <IconButton 
-                size="small" 
-                onClick={() => handleDelete(user.id)} 
-                sx={{ color: 'error.main' }}
-              >
-                <Delete />
-              </IconButton>
-            </Box>
-          )}
-        </Box>
-      </CardContent>
-    </Card>
-  );
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto', p: 2 }}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          Управление пользователями
-        </Typography>
-        {isAuthenticated && (
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={() => handleOpenDialog()}
-          >
-            Добавить пользователя
-          </Button>
-        )}
-      </Box>
-
-      {/* Уведомление для неавторизованных пользователей */}
-      {!isAuthenticated && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          <Typography variant="body1">
-            Вы просматриваете список пользователей в режиме только для чтения. 
-            Войдите в систему для управления пользователями.
+    <Box sx={{ 
+      background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+      minHeight: '100vh',
+      py: 4,
+    }}>
+      <Container maxWidth="lg">
+        {/* Заголовок */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+          <Typography variant="h4" sx={{ 
+            fontWeight: 700, 
+            color: '#1e293b',
+            background: 'linear-gradient(135deg, #1e293b 0%, #475569 100%)',
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}>
+            Управление пользователями
           </Typography>
-        </Alert>
-      )}
+          {canManageUsers && (
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={handleAddUser}
+              sx={{
+                background: 'linear-gradient(135deg, #3b82f6 0%, #38bdf8 100%)',
+                borderRadius: 3,
+                px: 3,
+                py: 1.5,
+                fontWeight: 600,
+                textTransform: 'none',
+                boxShadow: '0 8px 25px rgba(59, 130, 246, 0.3)',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 12px 35px rgba(59, 130, 246, 0.4)',
+                }
+              }}
+            >
+              Добавить пользователя
+            </Button>
+          )}
+        </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
+        {/* Информационное сообщение */}
+        {!isAuthenticated && (
+          <Alert 
+            severity="info" 
+            sx={{ 
+              mb: 3,
+              borderRadius: 3,
+              background: 'rgba(59, 130, 246, 0.05)',
+              border: '1px solid rgba(59, 130, 246, 0.1)',
+            }}
+          >
+            Вы просматриваете список пользователей в режиме только для чтения. Войдите в систему для управления пользователями.
+          </Alert>
+        )}
 
-      {/* Поиск в реальном времени */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
+        {/* Поиск */}
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
             Быстрый поиск
           </Typography>
           <TextField
             fullWidth
-            variant="outlined"
-            placeholder="Поиск по имени, фамилии, отчеству, email или должности..."
-            value={clientSearchQuery}
-            onChange={(e) => setClientSearchQuery(e.target.value)}
-            sx={{ mb: 2 }}
+            placeholder="Поиск по имени, фамилии, отчеству, email, телефону, должности, кабинету..."
+            value={searchQuery}
+            onChange={handleSearchChange}
             InputProps={{
               startAdornment: (
-                <Box sx={{ mr: 1, display: 'flex', alignItems: 'center' }}>
-                  <Person sx={{ color: 'action.active' }} />
-                </Box>
-              )
+                <InputAdornment position="start">
+                  <Search sx={{ color: '#64748b' }} />
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                borderRadius: 3,
+                border: '2px solid rgba(59, 130, 246, 0.1)',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                '&:hover': {
+                  borderColor: 'rgba(59, 130, 246, 0.3)',
+                  backgroundColor: 'rgba(255, 255, 255, 1)',
+                },
+                '&.Mui-focused': {
+                  borderColor: '#3b82f6',
+                  backgroundColor: 'rgba(255, 255, 255, 1)',
+                  boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.1)',
+                },
+                '& fieldset': {
+                  border: 'none',
+                },
+              },
             }}
           />
-          {clientSearchQuery && (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Найдено результатов: {filteredUsers.length}
-            </Typography>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Список пользователей */}
-      {loading ? (
-        <Box display="flex" justifyContent="center" my={3}>
-          <CircularProgress />
         </Box>
-      ) : filteredUsers.length === 0 ? (
-        <Card sx={{ mb: 3 }}>
-          <CardContent sx={{ textAlign: 'center', py: 4 }}>
-            <Typography variant="h6" color="text.secondary">
-              {clientSearchQuery 
-                ? `Не найдено пользователей по запросу "${clientSearchQuery}"` 
-                : 'Пользователи не найдены'
-              }
-            </Typography>
-          </CardContent>
-        </Card>
-      ) : (
-        <Box>
-          {filteredUsers.map((user) => renderUser(user))}
-        </Box>
-      )}
 
-      {/* Пагинация - скрываем при поиске */}
-      {users && users.pageCount > 1 && !clientSearchQuery && (
-        <Box display="flex" justifyContent="center" mt={3}>
-          <Pagination
-            count={users.pageCount}
-            page={page}
-            onChange={handlePageChange}
-            color="primary"
-          />
-        </Box>
-      )}
-
-      {/* Диалог создания/редактирования */}
-      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="md" fullWidth>
-        <DialogTitle>
-          {isEditing ? 'Редактировать пользователя' : 'Создать пользователя'}
-        </DialogTitle>
-        <DialogContent>
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2,
-              mt: 1
+        {/* Контент */}
+        {error && (
+          <Alert 
+            severity="error" 
+            sx={{ 
+              mb: 3,
+              borderRadius: 3,
+              background: 'rgba(239, 68, 68, 0.05)',
+              border: '1px solid rgba(239, 68, 68, 0.1)',
             }}
           >
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: { xs: 'column', md: 'row' },
-                gap: 2
-              }}
-            >
-              <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 50%' } }}>
-                <TextField
-                  fullWidth
-                  required
-                  name="firstName"
-                  label="Имя"
-                  value={formData.firstName || ''}
-                  onChange={handleFormChange}
-                />
-              </Box>
-              <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 50%' } }}>
-                <TextField
-                  fullWidth
-                  required
-                  name="lastName"
-                  label="Фамилия"
-                  value={formData.lastName || ''}
-                  onChange={handleFormChange}
-                />
-              </Box>
-            </Box>
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: { xs: 'column', md: 'row' },
-                gap: 2
-              }}
-            >
-              <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 50%' } }}>
-                <TextField
-                  fullWidth
-                  name="middleName"
-                  label="Отчество"
-                  value={formData.middleName || ''}
-                  onChange={handleFormChange}
-                />
-              </Box>
-              <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 50%' } }}>
-                <TextField
-                  fullWidth
-                  required
-                  name="email"
-                  label="Email"
-                  type="email"
-                  value={formData.email || ''}
-                  onChange={handleFormChange}
-                />
-              </Box>
-            </Box>
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: { xs: 'column', md: 'row' },
-                gap: 2
-              }}
-            >
-              <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 50%' } }}>
-                <TextField
-                  fullWidth
-                  name="position"
-                  label="Должность"
-                  value={formData.position || ''}
-                  onChange={handleFormChange}
-                />
-              </Box>
-              <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 50%' } }}>
-                <TextField
-                  fullWidth
-                  name="personalPhone"
-                  label="Личный телефон"
-                  value={formData.personalPhone || ''}
-                  onChange={handleFormChange}
-                />
-              </Box>
-            </Box>
-            <Box>
-              <TextField
-                fullWidth
-                name="officeNumber"
-                label="Номер офиса"
-                type="number"
-                value={formData.officeNumber || ''}
-                onChange={handleFormChange}
-              />
-            </Box>
-            <Box>
-              <TextField
-                fullWidth
-                name="note"
-                label="Примечание"
-                multiline
-                rows={3}
-                value={formData.note || ''}
-                onChange={handleFormChange}
-              />
-            </Box>
+            {error}
+          </Alert>
+        )}
+
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+            <CircularProgress size={60} sx={{ color: '#3b82f6' }} />
           </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Отмена</Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {isEditing ? 'Сохранить' : 'Создать'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        ) : (
+          <>
+            {users && users.queryResult.length > 0 ? (
+              <>
+                {/* Сетка карточек пользователей */}
+                <Box sx={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+                  gap: 3,
+                  mb: 4
+                }}>
+                  {users.queryResult.map((user) => (
+                    <Card
+                      key={user.id}
+                      onClick={(event) => handleViewUser(user.id, event)}
+                      sx={{
+                        borderRadius: 4,
+                        background: 'rgba(255, 255, 255, 0.9)',
+                        backdropFilter: 'blur(20px)',
+                        border: '1px solid rgba(59, 130, 246, 0.1)',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+                        '&:hover': {
+                          transform: 'translateY(-8px)',
+                          boxShadow: '0 25px 50px rgba(59, 130, 246, 0.15)',
+                          border: '1px solid rgba(59, 130, 246, 0.3)',
+                          background: 'rgba(255, 255, 255, 1)',
+                        },
+                        '&:active': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: '0 15px 35px rgba(59, 130, 246, 0.2)',
+                        }
+                      }}
+                    >
+                      <CardContent sx={{ p: 3 }}>
+                        {/* Заголовок карточки */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                          <Box sx={{ flexGrow: 1 }}>
+                            <Typography
+                              variant="h6"
+                              sx={{
+                                fontWeight: 700,
+                                color: '#1e293b',
+                                lineHeight: 1.2,
+                                mb: 0.5,
+                              }}
+                            >
+                              {user.firstName} {user.lastName}
+                            </Typography>
+                            {user.position && (
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  color: '#64748b',
+                                  fontWeight: 500,
+                                  mb: 1,
+                                }}
+                              >
+                                {user.position}
+                              </Typography>
+                            )}
+                            {user.role && (
+                              <Chip
+                                label={getRoleLabel(user.role)}
+                                color={getRoleColor(user.role)}
+                                size="small"
+                                sx={{
+                                  fontWeight: 600,
+                                  borderRadius: 2,
+                                }}
+                              />
+                            )}
+                          </Box>
+                        </Box>
+
+                        {/* Контактная информация */}
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                          {user.email && (
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              <Email sx={{ color: '#3b82f6', mr: 1.5, fontSize: '1.2rem' }} />
+                              <Typography
+                                variant="body2"
+                                component="a"
+                                href={`mailto:${user.email}`}
+                                onClick={(e) => e.stopPropagation()}
+                                sx={{
+                                  color: '#374151',
+                                  fontWeight: 500,
+                                  textDecoration: 'none',
+                                  '&:hover': {
+                                    color: '#3b82f6',
+                                    textDecoration: 'underline',
+                                  }
+                                }}
+                              >
+                                {user.email}
+                              </Typography>
+                            </Box>
+                          )}
+
+                          {user.personalPhone && (
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              <Phone sx={{ color: '#10b981', mr: 1.5, fontSize: '1.2rem' }} />
+                              <Typography
+                                variant="body2"
+                                component="a"
+                                href={`tel:${user.personalPhone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                sx={{
+                                  color: '#374151',
+                                  fontWeight: 500,
+                                  textDecoration: 'none',
+                                  '&:hover': {
+                                    color: '#10b981',
+                                    textDecoration: 'underline',
+                                  }
+                                }}
+                              >
+                                {user.personalPhone}
+                              </Typography>
+                            </Box>
+                          )}
+
+                          {user.officeNumber && (
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              <Business sx={{ color: '#f59e0b', mr: 1.5, fontSize: '1.2rem' }} />
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  color: '#374151',
+                                  fontWeight: 500,
+                                }}
+                              >
+                                Офис: {user.officeNumber}
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+
+                {/* Пагинация */}
+                {users.pageCount > 1 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                    <Pagination
+                      count={users.pageCount}
+                      page={page}
+                      onChange={handlePageChange}
+                      color="primary"
+                      size="large"
+                      sx={{
+                        '& .MuiPaginationItem-root': {
+                          borderRadius: 2,
+                          fontWeight: 600,
+                          '&.Mui-selected': {
+                            background: 'linear-gradient(135deg, #3b82f6 0%, #38bdf8 100%)',
+                            color: 'white',
+                            '&:hover': {
+                              background: 'linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%)',
+                            }
+                          }
+                        }
+                      }}
+                    />
+                  </Box>
+                )}
+              </>
+            ) : (
+              <Box sx={{ 
+                textAlign: 'center', 
+                py: 8,
+                background: 'rgba(255, 255, 255, 0.9)',
+                borderRadius: 4,
+                border: '1px solid rgba(59, 130, 246, 0.1)',
+              }}>
+                <Person sx={{ fontSize: 80, color: '#94a3b8', mb: 2 }} />
+                <Typography variant="h6" color="text.secondary" sx={{ mb: 1, fontWeight: 600 }}>
+                  {searchQuery ? 'Пользователи не найдены' : 'Пользователи отсутствуют'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {searchQuery 
+                    ? 'Попробуйте изменить поисковый запрос' 
+                    : 'Добавьте первого пользователя для начала работы'
+                  }
+                </Typography>
+              </Box>
+            )}
+          </>
+        )}
+      </Container>
     </Box>
   );
 };

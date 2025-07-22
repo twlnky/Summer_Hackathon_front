@@ -10,9 +10,16 @@ export class UserService {
     const params = new URLSearchParams();
     
     // Добавляем фильтры
-    if (userFilter.firstName) params.append('firstName', userFilter.firstName);
-    if (userFilter.lastName) params.append('lastName', userFilter.lastName);
-    if (userFilter.middleName) params.append('middleName', userFilter.middleName);
+    // Передаем globalSearch как firstName для глобального поиска
+    if (userFilter.globalSearch) {
+      params.append('firstName', userFilter.globalSearch);
+      console.log('UserService: Передаем поисковый запрос:', userFilter.globalSearch);
+    } else {
+      // Иначе используем отдельные поля
+      if (userFilter.firstName) params.append('firstName', userFilter.firstName);
+      if (userFilter.lastName) params.append('lastName', userFilter.lastName);
+      if (userFilter.middleName) params.append('middleName', userFilter.middleName);
+    }
     if (userFilter.id) params.append('id', userFilter.id.toString());
     
     // Добавляем пагинацию
@@ -22,26 +29,29 @@ export class UserService {
     // Добавляем сортировку
     sortParam.sortBy.forEach(sort => params.append('sortBy', sort));
     
+    console.log('UserService: Финальный URL запроса:', `/users/public?${params.toString()}`);
+    
     try {
-      const response = await apiClient.get<PageResult<User>>(`/users?${params.toString()}`);
+      // Всегда используем публичный эндпоинт для получения пользователей
+      // так как согласно бэкенду - это единственный работающий эндпоинт
+      const response = await apiClient.get<PageResult<User>>(`/users/public?${params.toString()}`);
+      console.log('UserService: Получен ответ от API:', response.data);
       return response.data;
     } catch (error: any) {
-      if (error.response?.status === 401) {
-        // Для анонимных пользователей возвращаем пустой результат
-        return {
-          queryResult: [],
-          pageCount: 0,
-          pageSize: pageParam.size,
-          total: 0,
-          currentPage: pageParam.page,
-          totalElements: 0
-        };
-      }
-      throw error;
+      console.error('Ошибка при получении пользователей:', error);
+      // Возвращаем пустой результат в случае ошибки
+      return {
+        queryResult: [],
+        pageCount: 0,
+        pageSize: pageParam.size,
+        total: 0,
+        currentPage: pageParam.page,
+        totalElements: 0
+      };
     }
   }
 
-  // Добавим отдельный метод для публичного получения пользователей по ID
+  // Публичный метод для получения всех пользователей (доступен анонимным пользователям)
   static async getPublicUsers(
     userFilter: UserFilter = {},
     pageParam: PageParam = { page: 0, size: 10 },
@@ -50,9 +60,16 @@ export class UserService {
     const params = new URLSearchParams();
     
     // Добавляем фильтры
-    if (userFilter.firstName) params.append('firstName', userFilter.firstName);
-    if (userFilter.lastName) params.append('lastName', userFilter.lastName);
-    if (userFilter.middleName) params.append('middleName', userFilter.middleName);
+    // Передаем globalSearch как firstName для глобального поиска
+    if (userFilter.globalSearch) {
+      params.append('firstName', userFilter.globalSearch);
+      console.log('UserService.getPublicUsers: Передаем поисковый запрос:', userFilter.globalSearch);
+    } else {
+      // Иначе используем отдельные поля
+      if (userFilter.firstName) params.append('firstName', userFilter.firstName);
+      if (userFilter.lastName) params.append('lastName', userFilter.lastName);
+      if (userFilter.middleName) params.append('middleName', userFilter.middleName);
+    }
     if (userFilter.id) params.append('id', userFilter.id.toString());
     
     // Добавляем пагинацию
@@ -62,7 +79,10 @@ export class UserService {
     // Добавляем сортировку
     sortParam.sortBy.forEach(sort => params.append('sortBy', sort));
     
+    console.log('UserService.getPublicUsers: Финальный URL запроса:', `/users/public?${params.toString()}`);
+    
     const response = await apiClient.get<PageResult<User>>(`/users/public?${params.toString()}`);
+    console.log('UserService.getPublicUsers: Получен ответ от API:', response.data);
     return response.data;
   }
 
@@ -72,17 +92,38 @@ export class UserService {
   }
 
   static async createUser(userData: Omit<User, 'id'>): Promise<User> {
-    const response = await apiClient.post<User>('/users', userData);
-    return response.data;
+    try {
+      const response = await apiClient.post<User>('/users', userData);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('Недостаточно прав для создания пользователя. Требуются права администратора или модератора.');
+      }
+      throw error;
+    }
   }
 
   static async updateUser(id: number, userData: Partial<User>): Promise<User> {
-    const response = await apiClient.put<User>(`/users/${id}`, userData);
-    return response.data;
+    try {
+      const response = await apiClient.put<User>(`/users/${id}`, userData);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('Недостаточно прав для редактирования пользователя. Требуются права администратора или модератора.');
+      }
+      throw error;
+    }
   }
 
   static async deleteUser(id: number): Promise<void> {
-    await apiClient.delete(`/users/${id}`);
+    try {
+      await apiClient.delete(`/users/${id}`);
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('Недостаточно прав для удаления пользователя. Требуются права администратора или модератора.');
+      }
+      throw error;
+    }
   }
 }
 

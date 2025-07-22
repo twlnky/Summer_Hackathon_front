@@ -69,6 +69,8 @@ export interface UserFilter {
   firstName?: string;
   lastName?: string;
   middleName?: string;
+  // Глобальный поиск - эквивалент передачи одинаковых значений в firstName, lastName, middleName
+  globalSearch?: string;
 }
 
 export interface DepartmentFilter {

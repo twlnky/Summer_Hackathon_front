@@ -25,6 +25,12 @@ import UserService from './services/userService';
 
 const HomePage = () => {
   const [activeTab, setActiveTab] = useState<string>('home');
+  
+  // Отладочная информация для отслеживания изменений вкладки
+  useEffect(() => {
+    console.log('HomePage: activeTab изменен на:', activeTab);
+  }, [activeTab]);
+
   const [departments, setDepartments] = useState<Department[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [departmentSearchQuery, setDepartmentSearchQuery] = useState<string>('');
@@ -78,12 +84,16 @@ const HomePage = () => {
   });
 
   const renderContent = () => {
+    console.log('Current activeTab:', activeTab); // Отладочная информация
     switch (activeTab) {
       case 'users':
+        console.log('HomePage: Отображаем UserManagement компонент'); // Отладочная информация
         return <UserManagement />;
       case 'departments':
+        console.log('HomePage: Отображаем DepartmentManagement компонент'); // Отладочная информация
         return <DepartmentManagement />;
       default:
+        console.log('HomePage: Отображаем главную страницу'); // Отладочная информация
         return (
           <Box sx={{ 
             background: '#f8fafc',
@@ -362,6 +372,166 @@ const HomePage = () => {
                       fontWeight: 500,
                     }}>
                       Попробуйте изменить поисковый запрос или очистить фильтры
+                    </Typography>
+                  </Card>
+                )}
+              </Box>
+
+              {/* Сотрудники РУТ МИИТ */}
+              <Box className="animate-slide-in" sx={{ mt: 6 }}>
+                <Typography variant="h5" sx={{ 
+                  fontWeight: 700, 
+                  mb: 3,
+                  color: '#1e293b',
+                  fontSize: { xs: '1.5rem', sm: '1.75rem' },
+                }}>
+                  Сотрудники РУТ МИИТ ({users.length})
+                </Typography>
+                
+                {users.length > 0 ? (
+                  <Box sx={{ 
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                    gap: 3,
+                    mb: 4
+                  }}>
+                    {users.slice(0, 12).map((user) => (
+                      <Card 
+                        key={user.id}
+                        className="card-modern animate-scale-in"
+                        onClick={() => router.push(`/users/${user.id}`)}
+                        sx={{ 
+                          p: 3,
+                          cursor: 'pointer',
+                          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #f1f5f9 100%)',
+                          border: '1px solid rgba(44, 62, 80, 0.08)',
+                          '&:hover': {
+                            transform: 'translateY(-4px)',
+                            boxShadow: '0 15px 35px rgba(44, 62, 80, 0.15)',
+                            border: '1px solid rgba(44, 62, 80, 0.15)',
+                            background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 30%, #e2e8f0 100%)',
+                          }
+                        }}
+                      >
+                        <CardContent sx={{ p: 0 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography 
+                                variant="h6" 
+                                sx={{ 
+                                  fontWeight: 700,
+                                  color: '#1e293b',
+                                  lineHeight: 1.3,
+                                  fontSize: '1rem',
+                                  mb: 0.5,
+                                }}
+                              >
+                                {`${user.lastName || ''} ${user.firstName || ''}${user.middleName ? ` ${user.middleName}` : ''}`.trim()}
+                              </Typography>
+                              
+                              {user.position && (
+                                <Typography 
+                                  variant="body2" 
+                                  sx={{ 
+                                    color: '#64748b',
+                                    fontSize: '0.875rem',
+                                    fontWeight: 500,
+                                    mb: 1
+                                  }}
+                                >
+                                  {user.position}
+                                </Typography>
+                              )}
+
+                              {user.officeNumber && (
+                                <Chip 
+                                  label={`Кабинет ${user.officeNumber}`}
+                                  size="small"
+                                  sx={{
+                                    background: 'rgba(44, 62, 80, 0.1)',
+                                    color: '#2C3E50',
+                                    fontWeight: 600,
+                                    fontSize: '0.75rem',
+                                    height: 20,
+                                    mb: 1,
+                                    '& .MuiChip-label': {
+                                      px: 1,
+                                    }
+                                  }}
+                                />
+                              )}
+
+                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 1 }}>
+                                {user.email && (
+                                  <Typography 
+                                    variant="caption" 
+                                    sx={{ 
+                                      color: '#2C3E50',
+                                      fontSize: '0.75rem',
+                                      fontWeight: 500,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      cursor: 'pointer',
+                                      '&:hover': {
+                                        textDecoration: 'underline'
+                                      }
+                                    }}
+                                    component="a"
+                                    href={`mailto:${user.email}`}
+                                  >
+                                    ✉️ {user.email}
+                                  </Typography>
+                                )}
+                                {user.personalPhone && (
+                                  <Typography 
+                                    variant="caption" 
+                                    sx={{ 
+                                      color: '#2C3E50',
+                                      fontSize: '0.75rem',
+                                      fontWeight: 500,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      cursor: 'pointer',
+                                      '&:hover': {
+                                        textDecoration: 'underline'
+                                      }
+                                    }}
+                                    component="a"
+                                    href={`tel:${user.personalPhone}`}
+                                  >
+                                    📞 {user.personalPhone}
+                                  </Typography>
+                                )}
+                              </Box>
+                            </Box>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Box>
+                ) : (
+                  <Card 
+                    className="card-modern"
+                    sx={{ 
+                      p: 6,
+                      textAlign: 'center',
+                      background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #f1f5f9 100%)',
+                      border: '1px solid rgba(44, 62, 80, 0.08)',
+                    }}
+                  >
+                    <PersonIcon sx={{ fontSize: 64, color: '#94a3b8', mb: 2 }} />
+                    <Typography variant="h6" sx={{ 
+                      fontWeight: 600, 
+                      color: '#475569',
+                      mb: 1
+                    }}>
+                      Сотрудники не найдены
+                    </Typography>
+                    <Typography variant="body2" sx={{ 
+                      color: '#64748b',
+                      fontWeight: 500,
+                    }}>
+                      Загрузка данных о сотрудниках...
                     </Typography>
                   </Card>
                 )}

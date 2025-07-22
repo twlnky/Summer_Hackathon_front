@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { AuthData, RegisterData, User } from '../types';
 import AuthService from '../services/authService';
+import CurrentUserService from '../services/currentUserService';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -34,20 +35,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     // Проверяем токен при загрузке приложения
-    const token = AuthService.getToken();
-    if (token) {
-      setIsAuthenticated(true);
-      // Пытаемся получить информацию о пользователе из localStorage
-      const userData = localStorage.getItem('user');
-      if (userData) {
+    const initializeAuth = async () => {
+      const token = AuthService.getToken();
+      if (token) {
         try {
-          setUser(JSON.parse(userData));
-        } catch (e) {
-          console.error('Ошибка при парсинге данных пользователя:', e);
+          // Пытаемся получить актуальную информацию о пользователе с сервера
+          const user = await CurrentUserService.getCurrentUser();
+          setUser(user);
+          setIsAuthenticated(true);
+          localStorage.setItem('user', JSON.stringify(user));
+        } catch (error) {
+          // Если не удалось получить информацию о пользователе, 
+          // пробуем восстановить из localStorage
+          const userData = localStorage.getItem('user');
+          if (userData) {
+            try {
+              const parsedUser = JSON.parse(userData);
+              setUser(parsedUser);
+              setIsAuthenticated(true);
+            } catch (e) {
+              console.error('Ошибка при парсинге данных пользователя:', e);
+              // Очищаем невалидные данные
+              AuthService.logout();
+              localStorage.removeItem('user');
+            }
+          } else {
+            // Токен есть, но пользователя нет - очищаем токен
+            AuthService.logout();
+          }
         }
       }
-    }
-    setLoading(false);
+      setLoading(false);
+    };
+
+    initializeAuth();
   }, []);
 
   const login = async (authData: AuthData): Promise<void> => {
@@ -55,25 +76,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await AuthService.login(authData);
       setIsAuthenticated(true);
       
-      // Сохраняем информацию о пользователе из ответа
-      if (response.user) {
-        setUser(response.user);
-        localStorage.setItem('user', JSON.stringify(response.user));
-      } else {
-        // ВРЕМЕННОЕ РЕШЕНИЕ: Создаем тестового админа
-        // TODO: Удалить когда backend будет возвращать информацию о пользователе
-        const testUser: User = {
-          id: 1,
-          firstName: 'Admin',
-          lastName: 'User',
+      // Получаем актуальную информацию о пользователе с сервера
+      try {
+        const user = await CurrentUserService.getCurrentUser();
+        setUser(user);
+        localStorage.setItem('user', JSON.stringify(user));
+      } catch (userError) {
+        console.error('Не удалось получить информацию о пользователе:', userError);
+        // В случае ошибки создаем базовый объект пользователя
+        const basicUser: User = {
+          id: 0,
+          firstName: 'Пользователь',
+          lastName: '',
           email: authData.username,
-          role: 'ADMIN',
+          role: 'USER',
           moderatorId: null,
           departmentsIds: []
         };
-        setUser(testUser);
-        localStorage.setItem('user', JSON.stringify(testUser));
-        console.log('ВРЕМЕННОЕ РЕШЕНИЕ: Создан тестовый админ', testUser);
+        setUser(basicUser);
+        localStorage.setItem('user', JSON.stringify(basicUser));
       }
     } catch (error) {
       throw error;

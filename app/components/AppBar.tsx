@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   AppBar as MuiAppBar,
   Toolbar,
@@ -47,16 +47,62 @@ interface AppBarProps {
 }
 
 const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
+  console.log('AppBar: Компонент отрендерен, onMenuItemClick получен:', typeof onMenuItemClick); // Отладочная информация
+  
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [searchResults, setSearchResults] = useState<{ departments: Department[], users: User[] }>({ departments: [], users: [] });
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [searchAnchorEl, setSearchAnchorEl] = useState<null | HTMLElement>(null);
-  const { isAuthenticated, logout } = useAuth();
+  
+  // Состояния для карточки сотрудника
+
+  
+  const { isAuthenticated, logout, user } = useAuth();
   const router = useRouter();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  // Debounce для поиска в AppBar
+  useEffect(() => {
+    console.log('AppBar: Запущен debounce таймер для:', searchQuery);
+    const timer = setTimeout(() => {
+      console.log('AppBar: Debounce завершен, устанавливаем debouncedSearchQuery:', searchQuery);
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // Задержка 500ms
+
+    return () => {
+      console.log('AppBar: Debounce таймер отменен');
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
+  // Выполняем поиск только когда изменяется debouncedSearchQuery
+  useEffect(() => {
+    const performSearch = async () => {
+      if (debouncedSearchQuery.trim()) {
+        setSearchOpen(true);
+        try {
+          console.log('AppBar: Выполняем поиск для:', debouncedSearchQuery);
+          const response = await SearchService.search(debouncedSearchQuery);
+          setSearchResults({
+            departments: response.departments || [],
+            users: response.users || []
+          });
+        } catch (error) {
+          console.error('Ошибка поиска:', error);
+          setSearchResults({ departments: [], users: [] });
+        }
+      } else {
+        setSearchOpen(false);
+        setSearchResults({ departments: [], users: [] });
+      }
+    };
+
+    performSearch();
+  }, [debouncedSearchQuery]);
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -76,26 +122,10 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
     setMobileOpen(!mobileOpen);
   };
 
-  const handleSearchChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const query = event.target.value;
     setSearchQuery(query);
-    
-    if (query.trim()) {
-      setSearchOpen(true);
-      try {
-        const response = await SearchService.search(query);
-        setSearchResults({
-          departments: response.departments || [],
-          users: response.users || []
-        });
-      } catch (error) {
-        console.error('Ошибка поиска:', error);
-        setSearchResults({ departments: [], users: [] });
-      }
-    } else {
-      setSearchOpen(false);
-      setSearchResults({ departments: [], users: [] });
-    }
+    console.log('AppBar: Изменился поисковый запрос:', query);
   };
 
   const handleSearchSubmit = (event: React.FormEvent) => {
@@ -103,12 +133,18 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
   };
 
   const handleSearchItemClick = (type: 'department' | 'user', id: number) => {
+    console.log('AppBar: Клик по элементу поиска:', type, id); // Отладочная информация
     if (type === 'department') {
       router.push(`/department/${id}`);
+    } else if (type === 'user') {
+      // Перейти на страницу пользователя
+      router.push(`/users/${id}`);
     }
     setSearchOpen(false);
     setSearchQuery('');
   };
+
+  // Остальные функции компонента...
 
   const handleSearchClickAway = () => {
     setSearchOpen(false);
@@ -121,6 +157,7 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
   ];
 
   const handleMenuItemClick = (item: string) => {
+    console.log('AppBar: Переключение на вкладку:', item); // Отладочная информация
     onMenuItemClick(item);
     if (isMobile) {
       setMobileOpen(false);
@@ -234,19 +271,18 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
               </Box>
             </Box>
             
-            {/* Search Bar */}
-            {isAuthenticated && (
-              <ClickAwayListener onClickAway={handleSearchClickAway}>
-                <Box 
-                  component="form" 
-                  onSubmit={handleSearchSubmit}
-                  sx={{ 
-                    flexGrow: 1, 
-                    maxWidth: { xs: 250, sm: 350, md: 450 }, 
-                    mr: 3,
-                    position: 'relative'
-                  }}
-                >
+            {/* Search Bar - доступен всем пользователям */}
+            <ClickAwayListener onClickAway={handleSearchClickAway}>
+              <Box 
+                component="form" 
+                onSubmit={handleSearchSubmit}
+                sx={{ 
+                  flexGrow: 1, 
+                  maxWidth: { xs: 250, sm: 350, md: 450 }, 
+                  mr: 3,
+                  position: 'relative'
+                }}
+              >
                   <TextField
                     size="small"
                     placeholder="Поиск сотрудников и департаментов..."
@@ -375,7 +411,7 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                           {searchResults.departments.length > 0 && <Divider sx={{ my: 1 }} />}
                           <Box sx={{ p: 2, pb: 1 }}>
                             <Typography variant="subtitle2" sx={{ 
-                              color: '#2563eb', 
+                              color: '#2C3E50', 
                               fontWeight: 600,
                               textTransform: 'uppercase',
                               letterSpacing: '0.5px',
@@ -409,10 +445,10 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                                   width: 32, 
                                   height: 32, 
                                   fontSize: '0.875rem',
-                                  background: '#2563eb',
+                                  background: '#2C3E50',
                                   color: 'white',
                                   fontWeight: 600,
-                                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+                                  boxShadow: '0 4px 12px rgba(44, 62, 80, 0.3)',
                                 }}
                               >
                                 {user.firstName?.charAt(0)}{user.lastName?.charAt(0)}
@@ -447,7 +483,6 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                   </Popper>
                 </Box>
               </ClickAwayListener>
-            )}
           </Box>
 
           {!isMobile && (
@@ -492,24 +527,19 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                 sx={{
                   borderRadius: 2,
                   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  px: 2,
                   '&:hover': {
                     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    transform: 'scale(1.05)',
                   }
                 }}
               >
-                <Avatar sx={{ 
-                  width: 36, 
-                  height: 36,
-                  background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-                  color: '#2563eb',
-                  fontWeight: 700,
-                  fontSize: '1rem',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-                  border: '2px solid rgba(255, 255, 255, 0.2)',
+                <Typography variant="body2" sx={{ 
+                  color: 'white', 
+                  fontWeight: 600,
+                  fontSize: '0.875rem'
                 }}>
-                  А
-                </Avatar>
+                  {user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Пользователь'}
+                </Typography>
               </IconButton>
               <Menu
                 id="menu-appbar"
@@ -536,6 +566,51 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                   }
                 }}
               >
+                {user && (
+                  <MenuItem 
+                    sx={{
+                      py: 1.5,
+                      px: 2,
+                      borderRadius: 2,
+                      mx: 1,
+                      mb: 1,
+                      border: '1px solid rgba(37, 99, 235, 0.1)',
+                      background: 'rgba(37, 99, 235, 0.05)',
+                      cursor: 'default',
+                      '&:hover': {
+                        background: 'rgba(37, 99, 235, 0.1)',
+                      }
+                    }}
+                  >
+                    <Avatar 
+                      sx={{ 
+                        mr: 2, 
+                        width: 32, 
+                        height: 32, 
+                        fontSize: '0.875rem',
+                        background: '#2563eb',
+                        color: 'white',
+                        fontWeight: 600,
+                        boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)',
+                      }}
+                    >
+                      {user.firstName?.charAt(0)}{user.lastName?.charAt(0)}
+                    </Avatar>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {user.firstName} {user.lastName}
+                      </Typography>
+                      <Typography variant="caption" sx={{ opacity: 0.8, fontWeight: 500 }}>
+                        {user.email}
+                      </Typography>
+                      {user.role && (
+                        <Typography variant="caption" sx={{ opacity: 0.6, fontWeight: 500, display: 'block' }}>
+                          Роль: {user.role === 'ADMIN' ? 'Администратор' : user.role === 'MODERATOR' ? 'Модератор' : 'Пользователь'}
+                        </Typography>
+                      )}
+                    </Box>
+                  </MenuItem>
+                )}
                 <MenuItem 
                   onClick={handleLogout}
                   sx={{
