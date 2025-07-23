@@ -90,7 +90,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
       >
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', ml: 1 }}>
-            🏛️ ИУЦТ
+             Телефонный справочник ИУЦТ
           </Typography>
         </Box>
         <Box sx={{ ml: 'auto' }}>
@@ -106,7 +106,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
             }}
             onClick={() => window.location.href = '/'}
           >
-            🏠 Главная
+            Главная
           </Button>
         </Box>
       </Box>

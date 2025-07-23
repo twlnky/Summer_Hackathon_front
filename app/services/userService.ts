@@ -7,19 +7,41 @@ export class UserService {
     pageParam: PageParam = { page: 0, size: 10 },
     sortParam: SortParam = { sortBy: ['id:asc'] }
   ): Promise<PageResult<User>> {
+    // Если это глобальный поиск, используем search API
+    if (userFilter.globalSearch) {
+      console.log('UserService: Используем search API для глобального поиска:', userFilter.globalSearch);
+      try {
+        const params = new URLSearchParams();
+        params.append('request', userFilter.globalSearch);
+        params.append('page', pageParam.page.toString());
+        params.append('size', pageParam.size.toString());
+        
+        const response = await apiClient.get(`/search?${params.toString()}`);
+        console.log('UserService: Получен ответ от search API:', response.data);
+        
+        // Возвращаем только пользователей из результата поиска
+        return {
+          queryResult: response.data.users || [],
+          pageCount: response.data.pageCount || 0,
+          pageSize: pageParam.size,
+          total: response.data.users?.length || 0,
+          currentPage: pageParam.page,
+          totalElements: response.data.users?.length || 0
+        };
+      } catch (error: any) {
+        console.error('Ошибка при поиске через search API:', error);
+        // Fallback на публичный API
+        return await this.getPublicUsers(userFilter, pageParam, sortParam);
+      }
+    }
+
+    // Для обычных фильтров используем стандартный API
     const params = new URLSearchParams();
     
-    // Добавляем фильтры
-    // Передаем globalSearch как firstName для глобального поиска
-    if (userFilter.globalSearch) {
-      params.append('firstName', userFilter.globalSearch);
-      console.log('UserService: Передаем поисковый запрос:', userFilter.globalSearch);
-    } else {
-      // Иначе используем отдельные поля
-      if (userFilter.firstName) params.append('firstName', userFilter.firstName);
-      if (userFilter.lastName) params.append('lastName', userFilter.lastName);
-      if (userFilter.middleName) params.append('middleName', userFilter.middleName);
-    }
+    // Добавляем фильтры для обычного поиска
+    if (userFilter.firstName) params.append('firstName', encodeURIComponent(userFilter.firstName));
+    if (userFilter.lastName) params.append('lastName', encodeURIComponent(userFilter.lastName));
+    if (userFilter.middleName) params.append('middleName', encodeURIComponent(userFilter.middleName));
     if (userFilter.id) params.append('id', userFilter.id.toString());
     
     // Добавляем пагинацию
@@ -32,14 +54,24 @@ export class UserService {
     console.log('UserService: Финальный URL запроса:', `/users/public?${params.toString()}`);
     
     try {
-      // Всегда используем публичный эндпоинт для получения пользователей
-      // так как согласно бэкенду - это единственный работающий эндпоинт
-      const response = await apiClient.get<PageResult<User>>(`/users/public?${params.toString()}`);
-      console.log('UserService: Получен ответ от API:', response.data);
+      // Сначала пытаемся использовать авторизованный эндпоинт
+      const response = await apiClient.get<PageResult<User>>(`/users?${params.toString()}`);
+      console.log('UserService: Получен ответ от авторизованного API:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('Ошибка при получении пользователей:', error);
-      // Возвращаем пустой результат в случае ошибки
+      console.error('Ошибка при получении пользователей из авторизованного API:', error);
+      
+      // Если нет авторизации, используем публичный эндпоинт
+      if (error.response?.status === 401) {
+        try {
+          console.log('UserService: Переключаемся на публичный поиск');
+          return await this.getPublicUsers(userFilter, pageParam, sortParam);
+        } catch (publicError: any) {
+          console.error('Ошибка при поиске через публичный API:', publicError);
+        }
+      }
+      
+      // Если все попытки неудачны, возвращаем пустой результат
       return {
         queryResult: [],
         pageCount: 0,
@@ -60,16 +92,11 @@ export class UserService {
     const params = new URLSearchParams();
     
     // Добавляем фильтры
-    // Передаем globalSearch как firstName для глобального поиска
-    if (userFilter.globalSearch) {
-      params.append('firstName', userFilter.globalSearch);
-      console.log('UserService.getPublicUsers: Передаем поисковый запрос:', userFilter.globalSearch);
-    } else {
-      // Иначе используем отдельные поля
-      if (userFilter.firstName) params.append('firstName', userFilter.firstName);
-      if (userFilter.lastName) params.append('lastName', userFilter.lastName);
-      if (userFilter.middleName) params.append('middleName', userFilter.middleName);
-    }
+    // Для публичного API не используем globalSearch, так как он не работает правильно
+    // Используем только отдельные поля
+    if (userFilter.firstName) params.append('firstName', userFilter.firstName);
+    if (userFilter.lastName) params.append('lastName', userFilter.lastName);
+    if (userFilter.middleName) params.append('middleName', userFilter.middleName);
     if (userFilter.id) params.append('id', userFilter.id.toString());
     
     // Добавляем пагинацию
@@ -127,4 +154,4 @@ export class UserService {
   }
 }
 
-export default UserService; 
+export default UserService;

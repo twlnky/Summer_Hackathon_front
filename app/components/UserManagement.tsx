@@ -28,11 +28,10 @@ import {
 import { User, PageResult } from '../types';
 import UserService from '../services/userService';
 import CurrentUserService from '../services/currentUserService';
+import apiClient from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 const UserManagement: React.FC = () => {
-  console.log('UserManagement компонент рендерится!'); // Отладочная информация
-  
   const router = useRouter();
   const { isAuthenticated, user: currentUser } = useAuth();
   const [users, setUsers] = useState<PageResult<User> | null>(null);
@@ -44,6 +43,23 @@ const UserManagement: React.FC = () => {
   const [canManageUsers, setCanManageUsers] = useState<boolean>(false);
 
   const pageSize = 12; // Показываем 12 карточек на странице
+
+  // Обработчик удаления пользователя
+  const handleDeleteUser = async (userId: number) => {
+    if (!canManageUsers) return;
+    if (!window.confirm('Вы уверены, что хотите удалить пользователя?')) return;
+    setLoading(true);
+    setError('');
+    try {
+      await UserService.deleteUser(userId);
+      // После удаления обновить список
+      await fetchUsers();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка при удалении пользователя');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const checkUserPermissions = async () => {
     if (isAuthenticated && currentUser) {
@@ -58,20 +74,47 @@ const UserManagement: React.FC = () => {
   };
 
   const fetchUsers = useCallback(async () => {
-    console.log('UserManagement: Начинаем загрузку пользователей...'); // Отладочная информация
     setLoading(true);
     setError('');
     try {
-      const result = await UserService.getUsers(
-        { globalSearch: debouncedSearchQuery }, // Используем debouncedSearchQuery
-        { page: page - 1, size: pageSize }, // Пагинация
-        { sortBy: ['id:asc'] } // Сортировка
-      );
-      console.log('UserManagement: Пользователи загружены:', result); // Отладочная информация
+      let result: PageResult<User>;
+      
+      if (debouncedSearchQuery) {
+        // Используем search API для поиска по всем полям
+        try {
+          const searchParams = new URLSearchParams();
+          searchParams.append('request', debouncedSearchQuery);
+          searchParams.append('page', (page - 1).toString());
+          searchParams.append('size', pageSize.toString());
+          
+          const response = await apiClient.get(`/search?${searchParams.toString()}`);
+          
+          // Возвращаем только пользователей из результата поиска
+          result = {
+            queryResult: response.data.users || [],
+            pageCount: response.data.pageCount || 0,
+            pageSize: pageSize,
+            total: response.data.users?.length || 0,
+            currentPage: page - 1,
+            totalElements: response.data.users?.length || 0
+          };
+        } catch (searchError: any) {
+          // Если search API не работает, показываем ошибку
+          throw new Error('Ошибка поиска: ' + (searchError.response?.data?.message || searchError.message));
+        }
+      } else {
+        // Для обычного просмотра используем публичный API без поиска
+        result = await UserService.getPublicUsers(
+          {}, // Пустой фильтр для получения всех пользователей
+          { page: page - 1, size: pageSize },
+          { sortBy: ['id:asc'] }
+        );
+      }
+      
       setUsers(result);
     } catch (err: any) {
       console.error('Ошибка при загрузке пользователей:', err);
-      setError(err.response?.data?.message || 'Ошибка при загрузке пользователей');
+      setError(err.response?.data?.message || err.message || 'Ошибка при загрузке пользователей');
     } finally {
       setLoading(false);
     }
@@ -79,14 +122,11 @@ const UserManagement: React.FC = () => {
 
   // Debounce для поискового запроса
   useEffect(() => {
-    console.log('UserManagement: Запущен debounce таймер для:', searchQuery);
     const timer = setTimeout(() => {
-      console.log('UserManagement: Debounce завершен, устанавливаем debouncedSearchQuery:', searchQuery);
       setDebouncedSearchQuery(searchQuery);
     }, 500); // Задержка 500ms
 
     return () => {
-      console.log('UserManagement: Debounce таймер отменен');
       clearTimeout(timer);
     };
   }, [searchQuery]);
@@ -109,11 +149,8 @@ const UserManagement: React.FC = () => {
   };
 
   const handleViewUser = (userId: number, event: React.MouseEvent) => {
-    console.log('UserManagement: Кликнули по карточке пользователя с ID:', userId); // Отладочная информация
-    console.log('UserManagement: Event:', event); // Отладочная информация
     event.preventDefault();
     event.stopPropagation();
-    console.log('UserManagement: Переходим на /users/' + userId); // Отладочная информация
     router.push(`/users/${userId}`);
   };
 
@@ -185,21 +222,6 @@ const UserManagement: React.FC = () => {
             </Button>
           )}
         </Box>
-
-        {/* Информационное сообщение */}
-        {!isAuthenticated && (
-          <Alert 
-            severity="info" 
-            sx={{ 
-              mb: 3,
-              borderRadius: 3,
-              background: 'rgba(59, 130, 246, 0.05)',
-              border: '1px solid rgba(59, 130, 246, 0.1)',
-            }}
-          >
-            Вы просматриваете список пользователей в режиме только для чтения. Войдите в систему для управления пользователями.
-          </Alert>
-        )}
 
         {/* Поиск */}
         <Box sx={{ mb: 4 }}>
@@ -308,7 +330,7 @@ const UserManagement: React.FC = () => {
                                 mb: 0.5,
                               }}
                             >
-                              {user.firstName} {user.lastName}
+                              {[user.lastName, user.firstName, user.middleName].filter(Boolean).join(' ')}
                             </Typography>
                             {user.position && (
                               <Typography
@@ -322,18 +344,22 @@ const UserManagement: React.FC = () => {
                                 {user.position}
                               </Typography>
                             )}
-                            {user.role && (
-                              <Chip
-                                label={getRoleLabel(user.role)}
-                                color={getRoleColor(user.role)}
-                                size="small"
-                                sx={{
-                                  fontWeight: 600,
-                                  borderRadius: 2,
-                                }}
-                              />
-                            )}
                           </Box>
+                          {/* Кнопка удаления, только для ADMIN */}
+                          {canManageUsers && user.role !== 'ADMIN' && (
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              size="small"
+                              sx={{ ml: 2 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteUser(user.id);
+                              }}
+                            >
+                              Удалить
+                            </Button>
+                          )}
                         </Box>
 
                         {/* Контактная информация */}

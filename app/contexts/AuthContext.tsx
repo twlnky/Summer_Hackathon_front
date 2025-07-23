@@ -1,17 +1,18 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AuthData, RegisterData, User } from '../types';
+import { AuthData, RegisterData, User, UserWithRole } from '../types';
 import AuthService from '../services/authService';
-import CurrentUserService from '../services/currentUserService';
+import RoleService from '../services/roleService';
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  user: User | null;
+  user: UserWithRole | null;
   login: (authData: AuthData) => Promise<void>;
   register: (registerData: RegisterData) => Promise<User>;
   logout: () => void;
   loading: boolean;
+  refreshUserInfo: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,37 +31,46 @@ interface AuthProviderProps {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserWithRole | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
+  // Функция для обновления информации о пользователе
+  const refreshUserInfo = async (): Promise<void> => {
+    try {
+      const userWithRole = await RoleService.getCurrentUserWithRole();
+      setUser(userWithRole);
+      localStorage.setItem('user', JSON.stringify(userWithRole));
+    } catch (error) {
+      console.error('❌ Failed to refresh user info:', error);
+    }
+  };
+
   useEffect(() => {
-    // Проверяем токен при загрузке приложения
     const initializeAuth = async () => {
       const token = AuthService.getToken();
       if (token) {
         try {
-          // Пытаемся получить актуальную информацию о пользователе с сервера
-          const user = await CurrentUserService.getCurrentUser();
-          setUser(user);
+          const userWithRole = await RoleService.getCurrentUserWithRole();
+          setUser(userWithRole);
           setIsAuthenticated(true);
-          localStorage.setItem('user', JSON.stringify(user));
+          localStorage.setItem('user', JSON.stringify(userWithRole));
         } catch (error) {
-          // Если не удалось получить информацию о пользователе, 
-          // пробуем восстановить из localStorage
+          console.warn('⚠️ Could not get user from backend, trying localStorage fallback');
           const userData = localStorage.getItem('user');
           if (userData) {
             try {
               const parsedUser = JSON.parse(userData);
+              if (!parsedUser.role) {
+                parsedUser.role = RoleService.determineRole(parsedUser);
+              }
               setUser(parsedUser);
               setIsAuthenticated(true);
             } catch (e) {
               console.error('Ошибка при парсинге данных пользователя:', e);
-              // Очищаем невалидные данные
               AuthService.logout();
               localStorage.removeItem('user');
             }
           } else {
-            // Токен есть, но пользователя нет - очищаем токен
             AuthService.logout();
           }
         }
@@ -75,26 +85,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const response = await AuthService.login(authData);
       setIsAuthenticated(true);
-      
-      // Получаем актуальную информацию о пользователе с сервера
       try {
-        const user = await CurrentUserService.getCurrentUser();
-        setUser(user);
-        localStorage.setItem('user', JSON.stringify(user));
+        const userWithRole = await RoleService.getCurrentUserWithRole();
+        setUser(userWithRole);
+        localStorage.setItem('user', JSON.stringify(userWithRole));
       } catch (userError) {
-        console.error('Не удалось получить информацию о пользователе:', userError);
-        // В случае ошибки создаем базовый объект пользователя
-        const basicUser: User = {
-          id: 0,
-          firstName: 'Пользователь',
-          lastName: '',
-          email: authData.username,
-          role: 'USER',
-          moderatorId: null,
-          departmentsIds: []
-        };
-        setUser(basicUser);
-        localStorage.setItem('user', JSON.stringify(basicUser));
+        console.warn('⚠️ Could not get user info from backend, using fallback logic');
+        // Fallback: try to get user from localStorage, and use RoleService.determineRole
+        const userData = localStorage.getItem('user');
+        if (userData) {
+          try {
+            const parsedUser = JSON.parse(userData);
+            if (!parsedUser.role) {
+              parsedUser.role = RoleService.determineRole(parsedUser);
+            }
+            setUser(parsedUser);
+            setIsAuthenticated(true);
+          } catch (e) {
+            console.error('Ошибка при парсинге данных пользователя:', e);
+            AuthService.logout();
+            localStorage.removeItem('user');
+          }
+        } else {
+          AuthService.logout();
+        }
       }
     } catch (error) {
       throw error;
@@ -104,7 +118,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const register = async (registerData: RegisterData): Promise<User> => {
     try {
       const user = await AuthService.register(registerData);
-      setUser(user);
       return user;
     } catch (error) {
       throw error;
@@ -125,9 +138,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     register,
     logout,
     loading,
+    refreshUserInfo,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
-
-export default AuthProvider; 

@@ -13,6 +13,24 @@ export interface User {
   role?: 'USER' | 'MODERATOR' | 'ADMIN';
 }
 
+// Новый интерфейс для ответа от /auth/me
+export interface UserWithRole {
+  authorities: any;
+  id: number;
+  username: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  officeNumber?: number;
+  personalPhone?: string;
+  position?: string;
+  note?: string;
+  moderatorId: number | null;
+  email: string;
+  departmentsIds: number[];
+  role: 'USER' | 'MODERATOR' | 'ADMIN'; // Роль обязательна
+}
+
 export interface Department {
   id: number;
   name: string;

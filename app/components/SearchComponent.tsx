@@ -68,12 +68,12 @@ const SearchComponent: React.FC = () => {
   const renderUser = (user: User) => (
     <ListItem key={user.id}>
       <ListItemAvatar>
-        <Avatar>
-          <Person />
+        <Avatar sx={{ bgcolor: 'primary.main' }}>
+          {(user.firstName?.charAt(0) || '') + (user.lastName?.charAt(0) || '')}
         </Avatar>
       </ListItemAvatar>
       <ListItemText
-        primary={`${user.firstName || ''} ${user.lastName || ''} ${user.middleName || ''}`}
+        primary={[user.lastName, user.firstName, user.middleName].filter(Boolean).join(' ')}
         secondary={
           <Box>
             <Typography 

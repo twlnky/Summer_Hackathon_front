@@ -40,7 +40,8 @@ import Image from 'next/image';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import SearchService from '../services/searchService';
-import { Department, User } from '../types';
+import { Department, User, UserWithRole } from '../types';
+import RoleService from '../services/roleService';
 
 interface AppBarProps {
   onMenuItemClick: (item: string) => void;
@@ -180,6 +181,8 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
     </List>
   );
 
+  // @ts-ignore
+  // @ts-ignore
   return (
     <>
       <MuiAppBar 
@@ -235,7 +238,7 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                 }}
               >
                 <Image
-                  src="/rut-miit-official-logo.svg"
+                  src="/rut-miit-official-logo.png"
                   alt="РУТ МИИТ Logo"
                   width={180}
                   height={58}
@@ -243,31 +246,6 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                     objectFit: 'contain',
                   }}
                 />
-              </Box>
-              <Box>
-                <Typography 
-                  variant="h6" 
-                  component="div" 
-                  sx={{ 
-                    fontWeight: 800,
-                    fontSize: { xs: '1rem', sm: '1.25rem' },
-                    color: 'white',
-                    textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                    lineHeight: 1.2,
-                  }}
-                >
-                  РУТ МИИТ
-                </Typography>
-                <Typography 
-                  variant="caption" 
-                  sx={{ 
-                    color: 'rgba(255, 255, 255, 0.8)',
-                    fontSize: '0.75rem',
-                    fontWeight: 500,
-                  }}
-                >
-                  ИУЦТ
-                </Typography>
               </Box>
             </Box>
             
@@ -292,7 +270,7 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                     sx={{
                       width: '100%',
                       '& .MuiOutlinedInput-root': {
-                        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                        backgroundColori: 'rgba(255, 255, 255, 0.15)',
                         backdropFilter: 'blur(10px)',
                         borderRadius: 3,
                         border: '1px solid rgba(255, 255, 255, 0.2)',
@@ -388,14 +366,24 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                                 color: 'inherit',
                                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                               }} />
-                              <Box>
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              <Box sx={{ flex: 1, minWidth: 0 }}>
+                                <Typography variant="body2" sx={{ 
+                                  fontWeight: 600,
+                                  wordWrap: 'break-word',
+                                  overflowWrap: 'break-word',
+                                  whiteSpace: 'normal',
+                                  lineHeight: 1.3,
+                                }}>
                                   {department.name}
                                 </Typography>
                                 {department.tag && (
                                   <Typography variant="caption" sx={{ 
                                     opacity: 0.8,
                                     fontWeight: 500,
+                                    wordWrap: 'break-word',
+                                    overflowWrap: 'break-word',
+                                    whiteSpace: 'normal',
+                                    display: 'block',
                                   }}>
                                     {department.tag}
                                   </Typography>
@@ -453,9 +441,15 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                               >
                                 {user.firstName?.charAt(0)}{user.lastName?.charAt(0)}
                               </Avatar>
-                              <Box>
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                  {user.firstName} {user.lastName}
+                              <Box sx={{ flex: 1, minWidth: 0 }}>
+                                <Typography variant="body2" sx={{ 
+                                  fontWeight: 600,
+                                  wordWrap: 'break-word',
+                                  overflowWrap: 'break-word',
+                                  whiteSpace: 'normal',
+                                  lineHeight: 1.3,
+                                }}>
+                                  {[user.lastName, user.firstName, user.middleName].filter(Boolean).join(' ')}
                                 </Typography>
                                 <Typography 
                                   variant="caption" 
@@ -466,6 +460,10 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                                     fontWeight: 500,
                                     textDecoration: 'none',
                                     color: 'inherit',
+                                    wordWrap: 'break-word',
+                                    overflowWrap: 'break-word',
+                                    whiteSpace: 'normal',
+                                    display: 'block',
                                     '&:hover': {
                                       color: 'primary.main',
                                       cursor: 'pointer'
@@ -538,7 +536,7 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                   fontWeight: 600,
                   fontSize: '0.875rem'
                 }}>
-                  {user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Пользователь'}
+                  {user && user.authorities[0].authority === "ADMIN" ? "Администратор" : (`Модератор ${user?.username}`)}
                 </Typography>
               </IconButton>
               <Menu
@@ -598,14 +596,14 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                     </Avatar>
                     <Box>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {user.firstName} {user.lastName}
+                        {[user.lastName, user.firstName, user.middleName].filter(Boolean).join(' ')}
                       </Typography>
                       <Typography variant="caption" sx={{ opacity: 0.8, fontWeight: 500 }}>
                         {user.email}
                       </Typography>
                       {user.role && (
                         <Typography variant="caption" sx={{ opacity: 0.6, fontWeight: 500, display: 'block' }}>
-                          Роль: {user.role === 'ADMIN' ? 'Администратор' : user.role === 'MODERATOR' ? 'Модератор' : 'Пользователь'}
+                          Роль: {RoleService.getRoleLabel(user.role || 'USER')}
                         </Typography>
                       )}
                     </Box>
@@ -689,7 +687,7 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
             gap: 2,
           }}>
             <Image
-              src="/rut-miit-official-logo.svg"
+              src="/rut-miit-official-logo.png"
               alt="РУТ МИИТ Logo"
               width={60}
               height={45}
