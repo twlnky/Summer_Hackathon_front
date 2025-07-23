@@ -1,0 +1,3 @@
+<!-- Placeholder for RUT MIIT PNG logo -->
+<!-- User should replace this file with their actual PNG logo -->
+<!-- File should be named: rut-miit-logo.png -->

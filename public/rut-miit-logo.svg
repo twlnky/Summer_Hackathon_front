@@ -1,0 +1,44 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#0ea5e9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Основной круг -->
+  <circle cx="20" cy="20" r="18" fill="url(#logoGradient)" stroke="white" stroke-width="2"/>
+  
+  <!-- Поезд -->
+  <g transform="translate(8, 12)">
+    <!-- Основа поезда -->
+    <rect x="2" y="8" width="20" height="6" rx="2" fill="white" opacity="0.9"/>
+    
+    <!-- Кабина -->
+    <rect x="14" y="4" width="8" height="8" rx="1" fill="white" opacity="0.9"/>
+    
+    <!-- Окна -->
+    <rect x="16" y="6" width="2" height="2" rx="0.5" fill="#2563eb" opacity="0.8"/>
+    <rect x="19" y="6" width="2" height="2" rx="0.5" fill="#2563eb" opacity="0.8"/>
+    
+    <!-- Колеса -->
+    <circle cx="6" cy="15" r="2" fill="white" opacity="0.9"/>
+    <circle cx="12" cy="15" r="2" fill="white" opacity="0.9"/>
+    <circle cx="18" cy="15" r="2" fill="white" opacity="0.9"/>
+    
+    <!-- Детали колес -->
+    <circle cx="6" cy="15" r="1" fill="#2563eb" opacity="0.8"/>
+    <circle cx="12" cy="15" r="1" fill="#2563eb" opacity="0.8"/>
+    <circle cx="18" cy="15" r="1" fill="#2563eb" opacity="0.8"/>
+    
+    <!-- Труба -->
+    <rect x="4" y="6" width="2" height="4" rx="1" fill="white" opacity="0.9"/>
+    <ellipse cx="5" cy="6" rx="1.5" ry="1" fill="white" opacity="0.9"/>
+    
+    <!-- Дым -->
+    <circle cx="3" cy="4" r="1" fill="white" opacity="0.6"/>
+    <circle cx="1" cy="2" r="0.8" fill="white" opacity="0.4"/>
+    <circle cx="5" cy="2" r="0.6" fill="white" opacity="0.3"/>
+  </g>
+</svg>

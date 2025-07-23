@@ -1,0 +1,60 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Фон -->
+  <rect width="48" height="48" rx="8" fill="#2C3E50"/>
+  
+  <!-- Герб (упрощенный) -->
+  <g transform="translate(8, 8)">
+    <!-- Щит -->
+    <path d="M6 2 L10 2 L12 4 L12 16 L4 16 L4 4 Z" fill="#FFD700"/>
+    
+    <!-- Двуглавый орел (стилизованный) -->
+    <g transform="translate(8, 6)">
+      <!-- Тело -->
+      <ellipse cx="0" cy="3" rx="2" ry="3" fill="#8B4513"/>
+      
+      <!-- Левая голова -->
+      <circle cx="-1.5" cy="1" r="1" fill="#8B4513"/>
+      
+      <!-- Правая голова -->
+      <circle cx="1.5" cy="1" r="1" fill="#8B4513"/>
+      
+      <!-- Крылья -->
+      <path d="M -2 2 Q -4 1 -4 3 Q -4 5 -2 4 Z" fill="#8B4513"/>
+      <path d="M 2 2 Q 4 1 4 3 Q 4 5 2 4 Z" fill="#8B4513"/>
+      
+      <!-- Корона -->
+      <path d="M -1 0 L 0 -1 L 1 0 Z" fill="#FFD700"/>
+    </g>
+  </g>
+  
+  <!-- Архитектурный элемент -->
+  <g transform="translate(18, 10)">
+    <!-- Основная конструкция -->
+    <path d="M 0 16 L 4 4 L 8 4 L 12 16 Z" fill="none" stroke="white" stroke-width="1.5"/>
+    <path d="M 2 16 L 5 8 L 7 8 L 10 16 Z" fill="none" stroke="white" stroke-width="1"/>
+    
+    <!-- Сетчатый узор -->
+    <g stroke="white" stroke-width="0.5" opacity="0.7">
+      <line x1="3" y1="5" x2="9" y2="5"/>
+      <line x1="3.5" y1="6" x2="8.5" y2="6"/>
+      <line x1="4" y1="7" x2="8" y2="7"/>
+      <line x1="4.5" y1="8" x2="7.5" y2="8"/>
+      
+      <!-- Диагональные линии -->
+      <line x1="4" y1="5" x2="5" y2="7"/>
+      <line x1="5" y1="5" x2="6" y2="7"/>
+      <line x1="6" y1="5" x2="7" y2="7"/>
+      <line x1="7" y1="5" x2="8" y2="7"/>
+    </g>
+  </g>
+  
+  <!-- Вертикальная линия -->
+  <line x1="34" y1="8" x2="34" y2="20" stroke="white" stroke-width="1.5"/>
+  
+  <!-- Текст (упрощенный) -->
+  <g fill="white" font-family="Arial, sans-serif" font-weight="bold">
+    <text x="36" y="12" font-size="3">РУТ</text>
+    <text x="36" y="16" font-size="3">МИИТ</text>
+    <text x="36" y="20" font-size="2.5">ИУЦТ</text>
+  </g>
+</svg>

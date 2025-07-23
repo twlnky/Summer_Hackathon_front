@@ -1,0 +1,1342 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { 
+  Box, 
+  Container, 
+  Typography, 
+  Card, 
+  CardContent, 
+  Avatar, 
+  Chip, 
+  Grid, 
+  CircularProgress, 
+  Alert, 
+  TextField, 
+  Button,
+  Pagination,
+  Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton
+} from '@mui/material';
+import { Business, Search as SearchIcon, Person as PersonIcon, Phone, Email, Close, AdminPanelSettings, SupervisorAccount } from '@mui/icons-material';
+import AppBar from './components/AppBar';
+import UserManagement from './components/UserManagement';
+import DepartmentManagement from './components/DepartmentManagement';
+import { useAuth } from './contexts/AuthContext';
+import { useRouter } from 'next/navigation';
+import { Department, User } from './types';
+import DepartmentService from './services/departmentService';
+import UserService from './services/userService';
+
+const HomePage = () => {
+  const [activeTab, setActiveTab] = useState<string>('home');
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [departmentSearchQuery, setDepartmentSearchQuery] = useState<string>('');
+  const [departmentsLoading, setDepartmentsLoading] = useState<boolean>(false);
+  const [loadingUsers, setLoadingUsers] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
+  
+  // Состояние для модального окна пользователя
+  const [userDialogOpen, setUserDialogOpen] = useState<boolean>(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  
+  // Пагинация для департаментов
+  const [departmentPage, setDepartmentPage] = useState<number>(1);
+  const [departmentTotalPages, setDepartmentTotalPages] = useState<number>(1);
+  const [departmentTotalCount, setDepartmentTotalCount] = useState<number>(0);
+  
+  // Пагинация для пользователей
+  const [userPage, setUserPage] = useState<number>(1);
+  const [userTotalPages, setUserTotalPages] = useState<number>(1);
+  const [userTotalCount, setUserTotalCount] = useState<number>(0);
+  
+  const { isAuthenticated, loading } = useAuth();
+  const router = useRouter();
+
+  const ITEMS_PER_PAGE = 12; // Количество элементов на странице
+
+  const fetchDepartments = async (page: number = 1) => {
+    setDepartmentsLoading(true);
+    setError('');
+
+    try {
+      console.log('=== ЗАГРУЗКА ДЕПАРТАМЕНТОВ ===');
+      const response = await DepartmentService.getDepartments({}, { page: page - 1, size: ITEMS_PER_PAGE });
+      console.log('Ответ от DepartmentService:', response);
+      console.log('Количество департаментов:', response.queryResult.length);
+      
+      // Подробно логируем каждый департамент
+      response.queryResult.forEach((dept, index) => {
+        console.log(`Департамент ${index + 1}:`, {
+          id: dept.id,
+          name: dept.name,
+          tag: dept.tag,
+          idType: typeof dept.id
+        });
+      });
+      
+      setDepartments(response.queryResult);
+      setDepartmentTotalPages(response.pageCount || 1);
+      setDepartmentTotalCount(response.totalElements || response.queryResult.length);
+      console.log('Департаменты установлены в состояние');
+    } catch (err: any) {
+      console.error('Ошибка при загрузке департаментов:', err);
+      setDepartments([]); // Устанавливаем пустой массив при ошибке
+      if (err.response?.status !== 401) {
+        setError(err.response?.data?.message || 'Ошибка при загрузке департаментов');
+      }
+    } finally {
+      setDepartmentsLoading(false);
+    }
+  };
+
+  const fetchUsers = async (page: number = 1) => {
+    setLoadingUsers(true);
+    try {
+      const response = await UserService.getUsers({}, { page: page - 1, size: ITEMS_PER_PAGE });
+      setUsers(response.queryResult);
+      setUserTotalPages(response.pageCount || 1);
+      setUserTotalCount(response.totalElements || response.queryResult.length);
+    } catch (err: any) {
+      console.error('Ошибка при загрузке пользователей:', err);
+      
+      // Если прямой API недоступен, попробуем собрать пользователей из департаментов
+      if (err.response?.status === 401 && departments.length > 0) {
+        console.log('Пытаемся получить пользователей через департаменты...');
+        await fetchUsersFromDepartments();
+      } else {
+        setUsers([]); // Устанавливаем пустой массив при других ошибках
+      }
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const fetchUsersFromDepartments = async () => {
+    try {
+      const allUsers: User[] = [];
+      const seenUserIds = new Set<number>();
+
+      // Получаем пользователей из каждого департамента
+      for (const department of departments) {
+        try {
+          const response = await DepartmentService.getUsersByDepartment(
+            department.id, 
+            {}, 
+            { page: 0, size: 100 }
+          );
+          
+          // Добавляем только уникальных пользователей
+          response.queryResult.forEach(user => {
+            if (!seenUserIds.has(user.id)) {
+              seenUserIds.add(user.id);
+              allUsers.push(user);
+            }
+          });
+        } catch (deptErr) {
+          console.error(`Ошибка при загрузке пользователей департамента ${department.name}:`, deptErr);
+        }
+      }
+
+      console.log(`Собрано пользователей из департаментов: ${allUsers.length}`);
+      setUsers(allUsers);
+    } catch (err) {
+      console.error('Ошибка при сборе пользователей из департаментов:', err);
+      setUsers([]);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'home') {
+      const loadData = async () => {
+        await fetchDepartments(departmentPage);
+      };
+      loadData();
+    }
+  }, [activeTab, departmentPage]);
+
+  // Загружаем пользователей после загрузки департаментов
+  useEffect(() => {
+    if (activeTab === 'home' && departments.length > 0) {
+      fetchUsers(userPage);
+    }
+  }, [departments, activeTab, userPage]);
+
+  // Убираем принудительную авторизацию для главной страницы
+  // useEffect(() => {
+  //   if (!loading && !isAuthenticated) {
+  //     router.push('/login');
+  //   }
+  // }, [loading, isAuthenticated, router]);
+
+  const handleMenuItemClick = (item: string) => {
+    setActiveTab(item);
+  };
+
+  const handleDepartmentClick = (departmentId: number) => {
+    console.log('=== КЛИК ПО ДЕПАРТАМЕНТУ ===');
+    console.log('Переданный departmentId:', departmentId);
+    console.log('Тип departmentId:', typeof departmentId);
+    console.log('Переход к URL:', `/department/${departmentId}`);
+    router.push(`/department/${departmentId}`);
+    console.log('=== ПЕРЕХОД ВЫПОЛНЕН ===');
+  };
+
+  // Обработчики пагинации
+  const handleDepartmentPageChange = (event: React.ChangeEvent<unknown>, value: number) => {
+    setDepartmentPage(value);
+    window.scrollTo(0, 0); // Прокручиваем наверх при смене страницы
+  };
+
+  const handleUserPageChange = (event: React.ChangeEvent<unknown>, value: number) => {
+    setUserPage(value);
+    window.scrollTo(0, 0); // Прокручиваем наверх при смене страницы
+  };
+
+  // Обработчики для модального окна пользователя
+  const handleUserClick = (user: User) => {
+    setSelectedUser(user);
+    setUserDialogOpen(true);
+  };
+
+  const handleCloseUserDialog = () => {
+    setUserDialogOpen(false);
+    setSelectedUser(null);
+  };
+
+  const getRoleIcon = (role?: string) => {
+    switch (role) {
+      case 'ADMIN':
+        return <AdminPanelSettings color="error" />;
+      case 'MODERATOR':
+        return <SupervisorAccount color="warning" />;
+      default:
+        return <PersonIcon color="action" />;
+    }
+  };
+
+  const getRoleLabel = (role?: string) => {
+    switch (role) {
+      case 'ADMIN':
+        return 'Администратор';
+      case 'MODERATOR':
+        return 'Модератор';
+      default:
+        return 'Сотрудник';
+    }
+  };
+
+  const getRoleColor = (role?: string): 'error' | 'warning' | 'primary' => {
+    switch (role) {
+      case 'ADMIN':
+        return 'error';
+      case 'MODERATOR':
+        return 'warning';
+      default:
+        return 'primary';
+    }
+  };
+
+  // Фильтрация департаментов по поиску
+  const filteredDepartments = departments.filter(department => {
+    if (!departmentSearchQuery) return true;
+    const query = departmentSearchQuery.toLowerCase();
+    return (
+      department.name?.toLowerCase().includes(query) ||
+      department.tag?.toLowerCase().includes(query) ||
+      department.description?.toLowerCase().includes(query)
+    );
+  });
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'users':
+        return <UserManagement />;
+      case 'departments':
+        return <DepartmentManagement />;
+      default:
+        return (
+          <Box sx={{ 
+            background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+            minHeight: '100vh',
+            py: 4,
+          }}>
+            <Container maxWidth="lg">
+              {/* Уведомление для неавторизованных пользователей */}
+              {!isAuthenticated && (
+                <Box 
+                  className="animate-fade-in"
+                  sx={{ 
+                    mb: 4,
+                    p: 3,
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #38bdf8 100%)',
+                    borderRadius: 4,
+                    color: 'white',
+                    textAlign: 'center',
+                    boxShadow: '0 20px 50px rgba(59, 130, 246, 0.3)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                  }}
+                >
+                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+                    Добро пожаловать в систему РУТ МИИТ
+                  </Typography>
+                  <Typography variant="body1" sx={{ mb: 3, opacity: 0.9 }}>
+                    Вы просматриваете систему в режиме только для чтения. 
+                    Войдите в систему для управления департаментами и пользователями.
+                  </Typography>
+                  <Button 
+                    variant="contained"
+                    size="large"
+                    onClick={() => router.push('/login')}
+                    sx={{
+                      background: 'rgba(255, 255, 255, 0.2)',
+                      backdropFilter: 'blur(10px)',
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                      borderRadius: 3,
+                      px: 4,
+                      py: 1.5,
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      '&:hover': {
+                        background: 'rgba(255, 255, 255, 0.3)',
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 12px 35px rgba(0, 0, 0, 0.2)',
+                      }
+                    }}
+                  >
+                    Авторизация
+                  </Button>
+                </Box>
+              )}
+              
+              {/* Hero Section */}
+              <Box 
+                className="animate-fade-in"
+                sx={{ 
+                  mb: 6, 
+                  textAlign: 'center',
+                  py: 4,
+                  background: 'rgba(255, 255, 255, 0.8)',
+                  backdropFilter: 'blur(20px)',
+                  borderRadius: 4,
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.1)',
+                }}
+              >
+                <Typography 
+                  variant="h3" 
+                  className="text-gradient"
+                  sx={{ 
+                    fontWeight: 800,
+                    mb: 2,
+                    fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' },
+                    letterSpacing: '-0.02em',
+                  }}
+                >
+                  РУТ МИИТ
+                </Typography>
+                <Typography 
+                  variant="h5" 
+                  sx={{ 
+                    fontWeight: 600,
+                    mb: 3,
+                    color: '#475569',
+                    fontSize: { xs: '1.25rem', sm: '1.5rem' },
+                  }}
+                >
+                  Институт управления и цифровых технологий
+                </Typography>
+                <Typography 
+                  variant="body1" 
+                  sx={{ 
+                    maxWidth: '600px',
+                    margin: '0 auto',
+                    color: '#64748b',
+                    fontSize: '1.1rem',
+                    lineHeight: 1.6,
+                    fontWeight: 500,
+                  }}
+                >
+                  Система управления департаментами и сотрудниками для эффективной организации работы института
+                </Typography>
+              </Box>
+
+              {/* Статистика */}
+              <Box 
+                className="animate-slide-in"
+                sx={{ mb: 6 }}
+              >
+                <Grid container spacing={4}>
+                  <Grid item xs={12} md={4}>
+                    <Card 
+                      className="card-modern"
+                      sx={{
+                        p: 3,
+                        textAlign: 'center',
+                        background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
+                        color: 'white',
+                        border: 'none',
+                        '&:hover': {
+                          transform: 'translateY(-8px)',
+                          boxShadow: '0 25px 50px rgba(37, 99, 235, 0.3)',
+                        }
+                      }}
+                    >
+                      <Business sx={{ fontSize: 48, mb: 2, opacity: 0.9 }} />
+                      <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
+                        {departmentTotalCount}
+                      </Typography>
+                      <Typography variant="body1" sx={{ opacity: 0.9, fontWeight: 500 }}>
+                        Департаментов
+                      </Typography>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Card 
+                      className="card-modern"
+                      sx={{
+                        p: 3,
+                        textAlign: 'center',
+                        background: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)',
+                        color: 'white',
+                        border: 'none',
+                        '&:hover': {
+                          transform: 'translateY(-8px)',
+                          boxShadow: '0 25px 50px rgba(14, 165, 233, 0.3)',
+                        }
+                      }}
+                    >
+                      <PersonIcon sx={{ fontSize: 48, mb: 2, opacity: 0.9 }} />
+                      <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
+                        {userTotalCount}
+                      </Typography>
+                      <Typography variant="body1" sx={{ opacity: 0.9, fontWeight: 500 }}>
+                        Сотрудников
+                      </Typography>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Card 
+                      className="card-modern"
+                      sx={{
+                        p: 3,
+                        textAlign: 'center',
+                        background: 'linear-gradient(135deg, #06b6d4 0%, #67e8f9 100%)',
+                        color: 'white',
+                        border: 'none',
+                        '&:hover': {
+                          transform: 'translateY(-8px)',
+                          boxShadow: '0 25px 50px rgba(6, 182, 212, 0.3)',
+                        }
+                      }}
+                    >
+                      <SearchIcon sx={{ fontSize: 48, mb: 2, opacity: 0.9 }} />
+                      <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
+                        {isAuthenticated ? 'Активен' : 'Чтение'}
+                      </Typography>
+                      <Typography variant="body1" sx={{ opacity: 0.9, fontWeight: 500 }}>
+                        Режим доступа
+                      </Typography>
+                    </Card>
+                  </Grid>
+                </Grid>
+              </Box>
+
+              {/* Поиск департаментов */}
+              <Box 
+                className="animate-fade-in"
+                sx={{ 
+                  mb: 4,
+                  p: 3,
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  backdropFilter: 'blur(20px)',
+                  borderRadius: 4,
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  boxShadow: '0 12px 35px rgba(0, 0, 0, 0.1)',
+                }}
+              >
+                <Typography variant="h5" sx={{ 
+                  fontWeight: 700, 
+                  mb: 3,
+                  color: '#1e293b',
+                  fontSize: { xs: '1.5rem', sm: '1.75rem' },
+                }}>
+                  Поиск департаментов
+                </Typography>
+                <TextField
+                  fullWidth
+                  placeholder="Поиск по названию департамента..."
+                  value={departmentSearchQuery}
+                  onChange={(e) => setDepartmentSearchQuery(e.target.value)}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                      borderRadius: 3,
+                      border: '2px solid rgba(37, 99, 235, 0.1)',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      '&:hover': {
+                        borderColor: 'rgba(37, 99, 235, 0.3)',
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                      },
+                      '&.Mui-focused': {
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(255, 255, 255, 1)',
+                        boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.1)',
+                      },
+                      '& fieldset': {
+                        border: 'none',
+                      },
+                    },
+                    '& .MuiInputBase-input': {
+                      py: 1.5,
+                      fontSize: '1rem',
+                      fontWeight: 500,
+                    },
+                  }}
+                  InputProps={{
+                    startAdornment: (
+                      <SearchIcon sx={{ 
+                        mr: 1, 
+                        color: '#64748b',
+                        fontSize: '1.5rem',
+                      }} />
+                    ),
+                  }}
+                />
+              </Box>
+
+              {/* Департаменты */}
+              <Box className="animate-slide-in">
+                <Typography variant="h5" sx={{ 
+                  fontWeight: 700, 
+                  mb: 3,
+                  color: '#1e293b',
+                  fontSize: { xs: '1.5rem', sm: '1.75rem' },
+                }}>
+                  Департаменты ({departmentTotalCount})
+                </Typography>
+                
+                {departmentsLoading ? (
+                  <Box sx={{ 
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+                    gap: 3,
+                    mb: 4
+                  }}>
+                    {[...Array(6)].map((_, index) => (
+                      <Card 
+                        key={index}
+                        className="card-modern shimmer"
+                        sx={{ 
+                          p: 3,
+                          height: 200,
+                          background: 'linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%)',
+                          backgroundSize: '200px 100%',
+                        }}
+                      />
+                    ))}
+                  </Box>
+                ) : filteredDepartments.length > 0 ? (
+                  <>
+                    <Box sx={{ 
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+                      gap: 3,
+                      mb: 4
+                    }}>
+                      {filteredDepartments.map((department, index) => (
+                        <Card 
+                          key={department.id}
+                          className="card-modern animate-scale-in"
+                          sx={{ 
+                            p: 3,
+                            cursor: 'pointer',
+                            background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                            border: '1px solid rgba(37, 99, 235, 0.1)',
+                            '&:hover': {
+                              transform: 'translateY(-8px)',
+                              boxShadow: '0 25px 50px rgba(37, 99, 235, 0.15)',
+                              border: '1px solid rgba(37, 99, 235, 0.2)',
+                            }
+                          }}
+                          onClick={() => router.push(`/department/${department.id}`)}
+                        >
+                          <CardContent sx={{ p: 0 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                              <Avatar 
+                                sx={{ 
+                                  mr: 2, 
+                                  width: 56, 
+                                  height: 56,
+                                  background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
+                                  color: 'white',
+                                  fontWeight: 700,
+                                  fontSize: '1.5rem',
+                                  boxShadow: '0 8px 25px rgba(37, 99, 235, 0.3)',
+                                }}
+                              >
+                                <Business />
+                              </Avatar>
+                              <Box sx={{ flex: 1 }}>
+                                <Typography 
+                                  variant="h6" 
+                                  sx={{ 
+                                    fontWeight: 700,
+                                    color: '#1e293b',
+                                    lineHeight: 1.3,
+                                    fontSize: '1.1rem',
+                                    mb: 1,
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                  }}
+                                >
+                                  {department.name}
+                                </Typography>
+                                {department.tag && (
+                                  <Chip 
+                                    label={department.tag}
+                                    size="small"
+                                    sx={{
+                                      background: 'linear-gradient(135deg, #60a5fa 0%, #67e8f9 100%)',
+                                      color: 'white',
+                                      fontWeight: 600,
+                                      fontSize: '0.75rem',
+                                      height: 24,
+                                      '& .MuiChip-label': {
+                                        px: 1,
+                                      }
+                                    }}
+                                  />
+                                )}
+                              </Box>
+                            </Box>
+                            
+                            {department.description && (
+                              <Typography 
+                                variant="body2" 
+                                sx={{ 
+                                  color: '#64748b',
+                                  lineHeight: 1.5,
+                                  fontSize: '0.9rem',
+                                  fontWeight: 500,
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 3,
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: 'hidden',
+                                }}
+                              >
+                                {department.description}
+                              </Typography>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </Box>
+                    
+                    {/* Пагинация */}
+                    {departmentTotalPages > 1 && (
+                      <Box sx={{ 
+                        display: 'flex', 
+                        justifyContent: 'center',
+                        mt: 4,
+                        p: 2,
+                        background: 'rgba(255, 255, 255, 0.8)',
+                        backdropFilter: 'blur(20px)',
+                        borderRadius: 4,
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                      }}>
+                        <Pagination 
+                          count={departmentTotalPages} 
+                          page={departmentPage} 
+                          onChange={(event, page) => {
+                            setDepartmentPage(page);
+                            fetchDepartments(page);
+                          }}
+                          size="large"
+                          sx={{
+                            '& .MuiPaginationItem-root': {
+                              fontWeight: 600,
+                              borderRadius: 2,
+                              '&.Mui-selected': {
+                                background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
+                                color: 'white',
+                                '&:hover': {
+                                  background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                                }
+                              },
+                              '&:hover': {
+                                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                              }
+                            }
+                          }}
+                        />
+                      </Box>
+                    )}
+                  </>
+                ) : (
+                  <Card 
+                    className="card-modern"
+                    sx={{ 
+                      p: 6,
+                      textAlign: 'center',
+                      background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                      border: '1px solid rgba(37, 99, 235, 0.1)',
+                    }}
+                  >
+                    <Business sx={{ fontSize: 64, color: '#94a3b8', mb: 2 }} />
+                    <Typography variant="h6" sx={{ 
+                      fontWeight: 600, 
+                      color: '#475569',
+                      mb: 1
+                    }}>
+                      Департаменты не найдены
+                    </Typography>
+                    <Typography variant="body2" sx={{ 
+                      color: '#64748b',
+                      fontWeight: 500,
+                    }}>
+                      Попробуйте изменить поисковый запрос или очистить фильтры
+                    </Typography>
+                  </Card>
+                )}
+              </Box>
+            </Container>
+          </Box>
+        );
+    }
+  };
+                  fontWeight: 'bold',
+                  color: '#333',
+                  mb: 2,
+                  fontSize: { xs: '2rem', md: '3rem' }
+                }}>
+                  Добро пожаловать в телефонный справочник ИУЦТ
+                </Typography>
+                
+                <Typography variant="h6" sx={{ 
+                  color: '#666',
+                  fontSize: { xs: '1rem', md: '1.25rem' },
+                  maxWidth: '600px',
+                  mx: 'auto'
+                }}>
+                 
+                </Typography>
+              </Box>
+
+              {/* Departments Section */}
+              <Box sx={{ mb: 4 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                  <Typography variant="h4" sx={{ color: '#333', fontWeight: 'bold' }}>
+                    Подразделения ИУЦТ
+                  </Typography>
+                </Box>
+
+                {departments.length > 0 && (
+                  /* Search Field for Departments */
+                  <Box sx={{ mb: 3 }}>
+                    <TextField
+                      fullWidth
+                      variant="outlined"
+                      placeholder="Поиск департаментов по названию, тегу или описанию..."
+                      value={departmentSearchQuery}
+                      onChange={(e) => setDepartmentSearchQuery(e.target.value)}
+                      sx={{ 
+                        backgroundColor: 'white',
+                        borderRadius: 2,
+                        '& .MuiOutlinedInput-root': {
+                          '& fieldset': {
+                            borderColor: '#e0e0e0',
+                          },
+                          '&:hover fieldset': {
+                            borderColor: '#1976d2',
+                          },
+                          '&.Mui-focused fieldset': {
+                            borderColor: '#1976d2',
+                          },
+                        }
+                      }}
+                      InputProps={{
+                        startAdornment: <SearchIcon sx={{ mr: 1, color: 'action.active' }} />
+                      }}
+                    />
+                    {departmentSearchQuery && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        Найдено департаментов: {filteredDepartments.length}
+                      </Typography>
+                    )}
+                  </Box>
+                )}
+                
+                {departmentsLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : error ? (
+                  <Alert severity="error" sx={{ mb: 3 }}>
+                    {error}
+                  </Alert>
+                ) : departments.length === 0 ? (
+                  <Card sx={{ p: 4, textAlign: 'center' }}>
+                    <Typography variant="h6" color="text.secondary">
+                      {!isAuthenticated 
+                        ? 'Список департаментов доступен после авторизации' 
+                        : 'Департаменты не найдены'
+                      }
+                    </Typography>
+                    {!isAuthenticated && (
+                      <Button 
+                        variant="contained" 
+                        onClick={() => router.push('/login')}
+                        sx={{ mt: 2 }}
+                      >
+                        Войти в систему
+                      </Button>
+                    )}
+                  </Card>
+                ) : filteredDepartments.length === 0 ? (
+                  <Card sx={{ p: 4, textAlign: 'center' }}>
+                    <Typography variant="h6" color="text.secondary">
+                      {departmentSearchQuery 
+                        ? `Не найдено департаментов по запросу "${departmentSearchQuery}"` 
+                        : 'Департаменты не найдены'
+                      }
+                    </Typography>
+                  </Card>
+                ) : (
+                  <Grid container spacing={3}>
+                    {filteredDepartments.map((department) => {
+                      console.log('Отображаем департамент:', {
+                        id: department.id,
+                        name: department.name,
+                        idType: typeof department.id
+                      });
+                      return (
+                        <Grid size={{ xs: 12, sm: 6, md: 4 }} key={department.id}>
+                          <Card 
+                            sx={{ 
+                              height: '100%',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                              borderRadius: 2,
+                              border: '1px solid #e0e0e0',
+                              transition: 'all 0.3s ease',
+                              cursor: 'pointer',
+                              '&:hover': {
+                                boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
+                                transform: 'translateY(-2px)'
+                              }
+                            }}
+                            onClick={() => {
+                              console.log('Клик по карточке департамента:', department.name, 'ID:', department.id);
+                              handleDepartmentClick(department.id);
+                            }}
+                          >
+                          <CardContent sx={{ p: 3 }}>
+                            <Box sx={{ 
+                              width: 48, 
+                              height: 48, 
+                              borderRadius: 2,
+                              backgroundColor: '#e3f2fd',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              mb: 2
+                            }}>
+                              <Business sx={{ color: '#1976d2' }} />
+                            </Box>
+
+                            <Typography 
+                              variant="h6" 
+                              sx={{ 
+                                fontWeight: 'bold',
+                                mb: 1,
+                                color: '#333',
+                                fontSize: '1.1rem'
+                              }}
+                            >
+                              {department.name}
+                            </Typography>
+
+                            {department.tag && (
+                              <Chip 
+                                label={department.tag} 
+                                size="small"
+                                sx={{ 
+                                  mb: 1,
+                                  backgroundColor: '#e3f2fd',
+                                  color: '#1976d2',
+                                  fontWeight: 'bold'
+                                }} 
+                              />
+                            )}
+
+                            {department.description && (
+                              <Typography 
+                                variant="body2" 
+                                sx={{ 
+                                  color: '#666',
+                                  mb: 2,
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: 'hidden',
+                                  fontSize: '0.9rem'
+                                }}
+                              >
+                                {department.description}
+                              </Typography>
+                            )}
+
+                            <Box sx={{ 
+                              display: 'flex', 
+                              alignItems: 'center',
+                              mb: 2
+                            }}>
+                            
+                            </Box>
+
+                            {department.moderator && (
+                              <Box sx={{ 
+                                pt: 2, 
+                                borderTop: '1px solid #e0e0e0'
+                              }}>
+                                <Typography variant="caption" sx={{ color: '#666' }}>
+                                  Модератор
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 'medium', color: '#333' }}>
+                                  {department.moderator.firstName} {department.moderator.lastName}
+                                </Typography>
+                              </Box>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                      );
+                    })}
+                  </Grid>
+                )}
+                
+                {/* Пагинация для департаментов */}
+                {!departmentsLoading && departments.length > 0 && departmentTotalPages > 1 && (
+                  <Stack spacing={2} sx={{ mt: 4, alignItems: 'center' }}>
+                    <Pagination 
+                      count={departmentTotalPages} 
+                      page={departmentPage} 
+                      onChange={handleDepartmentPageChange}
+                      color="primary"
+                      size="large"
+                      showFirstButton 
+                      showLastButton
+                      sx={{
+                        '& .MuiPaginationItem-root': {
+                          backgroundColor: 'white',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          '&:hover': {
+                            backgroundColor: '#f5f5f5',
+                          },
+                          '&.Mui-selected': {
+                            backgroundColor: '#1976d2',
+                            color: 'white',
+                            '&:hover': {
+                              backgroundColor: '#1565c0',
+                            },
+                          },
+                        }
+                      }}
+                    />
+                  </Stack>
+                )}
+              </Box>
+
+              {/* Users Section */}
+              <Box sx={{ mb: 4 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                  <Typography variant="h4" sx={{ color: '#333', fontWeight: 'bold' }}>
+                    Сотрудники организации
+                  </Typography>
+                </Box>
+                
+                {!isAuthenticated && users.length > 0 && (
+                  <Alert 
+                    severity="info" 
+                    sx={{ 
+                      mb: 3,
+                      borderRadius: 2
+                    }}
+                  >
+                    <Typography variant="body2">
+                      Показаны сотрудники из доступных департаментов. 
+                      Войдите в систему для просмотра полного справочника.
+                    </Typography>
+                  </Alert>
+                )}
+                
+                {loadingUsers ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : users.length === 0 ? (
+                  <Card sx={{ p: 4, textAlign: 'center' }}>
+                    <Typography variant="h6" color="text.secondary">
+                      {!isAuthenticated 
+                        ? 'Загружаем доступную информацию о сотрудниках...Coming soon' 
+                        : 'Cотрудники не найдены'
+                      }
+                    </Typography>
+                    {!isAuthenticated && !loadingUsers && (
+                      <Box sx={{ mt: 2 }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          Для полного доступа к справочнику войдите в систему
+                        </Typography>
+                        <Button 
+                          variant="contained" 
+                          onClick={() => router.push('/login')}
+                        >
+                          Войти в систему
+                        </Button>
+                      </Box>
+                    )}
+                  </Card>
+                ) : (
+                  <Grid container spacing={3}>
+                    {users.map((user) => (
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }} key={user.id}>
+                        <Card 
+                          sx={{ 
+                            height: '100%',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                            borderRadius: 2,
+                            border: '1px solid #e0e0e0',
+                            transition: 'all 0.3s ease',
+                            cursor: 'pointer',
+                            '&:hover': {
+                              boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
+                              transform: 'translateY(-2px)'
+                            }
+                          }}
+                          onClick={() => handleUserClick(user)}
+                        >
+                          <CardContent sx={{ p: 3, textAlign: 'center' }}>
+                            <Avatar 
+                              sx={{ 
+                                width: 56, 
+                                height: 56, 
+                                mx: 'auto',
+                                mb: 2,
+                                bgcolor: '#1976d2',
+                                fontSize: '1.25rem',
+                                fontWeight: 'bold'
+                              }}
+                            >
+                              {user.firstName?.charAt(0) || '?'}{user.lastName?.charAt(0) || '?'}
+                            </Avatar>
+
+                            <Typography 
+                              variant="h6" 
+                              sx={{ 
+                                fontWeight: 'bold',
+                                mb: 1,
+                                color: '#333',
+                                fontSize: '1rem'
+                              }}
+                            >
+                              {user.firstName} {user.lastName}
+                            </Typography>
+
+                            {user.position && (
+                              <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                                {user.position}
+                              </Typography>
+                            )}
+
+                            <Box sx={{ 
+                              display: 'flex', 
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              mb: 1
+                            }}>
+                              <PersonIcon sx={{ fontSize: 16, mr: 0.5, color: '#666' }} />
+                              <Typography variant="caption" sx={{ color: '#666' }}>
+                                {user.email}
+                              </Typography>
+                            </Box>
+
+                            {user.officeNumber && (
+                              <Box sx={{ 
+                                display: 'flex', 
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}>
+                                <Business sx={{ fontSize: 16, mr: 0.5, color: '#666' }} />
+                                <Typography variant="caption" sx={{ color: '#666' }}>
+                                  Кабинет {user.officeNumber}
+                                </Typography>
+                              </Box>
+                            )}
+
+                            {user.role && (
+                              <Box sx={{ mt: 2 }}>
+                                <Chip 
+                                  label={user.role === 'ADMIN' ? 'Администратор' : user.role === 'MODERATOR' ? 'Модератор' : 'Сотрудник'}
+                                  size="small"
+                                  color={user.role === 'ADMIN' ? 'error' : user.role === 'MODERATOR' ? 'warning' : 'primary'}
+                                  sx={{ fontSize: '0.75rem' }}
+                                />
+                              </Box>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
+                )}
+                
+                {/* Пагинация для пользователей */}
+                {!loadingUsers && users.length > 0 && userTotalPages > 1 && (
+                  <Stack spacing={2} sx={{ mt: 4, alignItems: 'center' }}>
+                    <Pagination 
+                      count={userTotalPages} 
+                      page={userPage} 
+                      onChange={handleUserPageChange}
+                      color="primary"
+                      size="large"
+                      showFirstButton 
+                      showLastButton
+                      sx={{
+                        '& .MuiPaginationItem-root': {
+                          backgroundColor: 'white',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          '&:hover': {
+                            backgroundColor: '#f5f5f5',
+                          },
+                          '&.Mui-selected': {
+                            backgroundColor: '#1976d2',
+                            color: 'white',
+                            '&:hover': {
+                              backgroundColor: '#1565c0',
+                            },
+                          },
+                        }
+                      }}
+                    />
+                  </Stack>
+                )}
+              </Box>
+              
+              {/* Блок для неавторизованных пользователей */}
+              {!isAuthenticated && (
+                <Box sx={{ mb: 4 }}>
+                  <Card 
+                    sx={{ 
+                      p: 4, 
+                      textAlign: 'center',
+                      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+                      borderRadius: 3,
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    <Typography variant="h5" sx={{ color: '#333', mb: 2, fontWeight: 'bold' }}>
+                      Система управления ИУЦТ - Режим просмотра
+                    </Typography>
+                    
+                    <Typography variant="body1" sx={{ color: '#666', mb: 3, maxWidth: '600px', mx: 'auto' }}>
+                      Вы можете просматривать информацию о департаментах и сотрудниках. 
+                      Войдите в систему для получения возможности управления и редактирования.
+                    </Typography>
+                    
+                    <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+                      <Button 
+                        variant="contained" 
+                        size="large"
+                        onClick={() => router.push('/login')}
+                        sx={{
+                          background: 'linear-gradient(45deg, #667eea 30%, #764ba2 90%)',
+                          borderRadius: 3,
+                          px: 4,
+                          py: 1.5
+                        }}
+                      >
+                        Войти в систему
+                      </Button>
+                      
+                      <Button 
+                        variant="outlined" 
+                        size="large"
+                        onClick={() => router.push('/register')}
+                        sx={{
+                          borderColor: '#667eea',
+                          color: '#667eea',
+                          borderRadius: 3,
+                          px: 4,
+                          py: 1.5,
+                          '&:hover': {
+                            borderColor: '#764ba2',
+                            backgroundColor: 'rgba(102, 126, 234, 0.04)'
+                          }
+                        }}
+                      >
+                        Регистрация
+                      </Button>
+                    </Box>
+                  </Card>
+                </Box>
+              )}
+            </Container>
+          </Box>
+        );
+    }
+  };
+
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        }}
+      >
+        <CircularProgress sx={{ color: 'white' }} />
+      </Box>
+    );
+  }
+
+  // Не перенаправляем неавторизованных пользователей, показываем им главную страницу
+  // if (!isAuthenticated) {
+  //   return (
+  //     <Box
+  //       sx={{
+  //         display: 'flex',
+  //         justifyContent: 'center',
+  //         alignItems: 'center',
+  //         minHeight: '100vh',
+  //         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  //       }}
+  //     >
+  //       <CircularProgress sx={{ color: 'white' }} />
+  //     </Box>
+  //   );
+  // }
+
+  return (
+    <Box sx={{ flexGrow: 1 }}>
+      <AppBar onMenuItemClick={handleMenuItemClick} />
+      {renderContent()}
+      
+      {/* Модальное окно пользователя */}
+      <Dialog 
+        open={userDialogOpen} 
+        onClose={handleCloseUserDialog}
+        maxWidth="sm"
+        fullWidth
+        sx={{ 
+          '& .MuiDialog-paper': {
+            borderRadius: 2,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+          }
+        }}
+      >
+        <DialogTitle 
+          sx={{ 
+            fontWeight: 'bold',
+            color: '#333',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            p: 3,
+            borderBottom: '1px solid #e0e0e0'
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            {selectedUser && getRoleIcon(selectedUser.role)}
+            <Typography variant="h6" sx={{ ml: 1 }}>
+              {selectedUser ? `${selectedUser.firstName} ${selectedUser.lastName}` : 'Пользователь'}
+            </Typography>
+          </Box>
+          
+          <IconButton onClick={handleCloseUserDialog} size="small">
+            <Close />
+          </IconButton>
+        </DialogTitle>
+        
+        <DialogContent sx={{ p: 3 }}>
+          {selectedUser ? (
+            <Box>
+              <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                Роль: 
+                <Chip 
+                  label={getRoleLabel(selectedUser.role)} 
+                  size="small"
+                  color={getRoleColor(selectedUser.role)}
+                  sx={{ 
+                    ml: 1,
+                    fontWeight: 'medium',
+                    borderRadius: 1.5,
+                    height: 24,
+                    '& .MuiChip-label': {
+                      px: 1.5,
+                      py: 0.5,
+                    }
+                  }} 
+                />
+              </Typography>
+
+              <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                Email: {selectedUser.email}
+              </Typography>
+
+              {selectedUser.personalPhone && (
+                <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                  Телефон: {selectedUser.personalPhone}
+                </Typography>
+              )}
+
+              {selectedUser.officeNumber && (
+                <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                  Кабинет: {selectedUser.officeNumber}
+                </Typography>
+              )}
+
+              {selectedUser.position && (
+                <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                  Должность: {selectedUser.position}
+                </Typography>
+              )}
+
+              {selectedUser.note && (
+                <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                  Примечание: {selectedUser.note}
+                </Typography>
+              )}
+            </Box>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Загрузка данных пользователя...
+            </Typography>
+          )}
+        </DialogContent>
+        
+        <DialogActions sx={{ p: 2, justifyContent: 'flex-end' }}>
+          <Button 
+            onClick={handleCloseUserDialog} 
+            color="primary" 
+            variant="contained"
+            sx={{ borderRadius: 2 }}
+          >
+            Закрыть
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default HomePage;

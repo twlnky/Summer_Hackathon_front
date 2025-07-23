@@ -1,0 +1,78 @@
+<svg width="400" height="120" viewBox="0 0 400 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Фон -->
+  <rect width="400" height="120" fill="#2C3E50"/>
+  
+  <!-- Герб России -->
+  <g transform="translate(30, 20)">
+    <!-- Основа герба -->
+    <path d="M40 10 L60 10 L65 20 L65 70 L35 70 L35 20 Z" fill="#FFD700" stroke="#8B4513" stroke-width="1"/>
+    
+    <!-- Орел -->
+    <g transform="translate(50, 25)">
+      <!-- Тело орла -->
+      <ellipse cx="0" cy="15" rx="8" ry="12" fill="#8B4513"/>
+      
+      <!-- Левое крыло -->
+      <path d="M -8 10 Q -18 5 -20 15 Q -18 25 -8 20 Z" fill="#8B4513"/>
+      
+      <!-- Правое крыло -->
+      <path d="M 8 10 Q 18 5 20 15 Q 18 25 8 20 Z" fill="#8B4513"/>
+      
+      <!-- Левая голова -->
+      <circle cx="-5" cy="5" r="4" fill="#8B4513"/>
+      <path d="M -9 3 L -11 1 L -9 5 Z" fill="#FFD700"/>
+      
+      <!-- Правая голова -->
+      <circle cx="5" cy="5" r="4" fill="#8B4513"/>
+      <path d="M 9 3 L 11 1 L 9 5 Z" fill="#FFD700"/>
+      
+      <!-- Центральная корона -->
+      <path d="M -3 0 L 0 -5 L 3 0 Z" fill="#FFD700"/>
+      
+      <!-- Хвост -->
+      <path d="M 0 27 Q -5 35 0 40 Q 5 35 0 27 Z" fill="#8B4513"/>
+    </g>
+  </g>
+  
+  <!-- Архитектурный элемент -->
+  <g transform="translate(120, 20)">
+    <!-- Основная конструкция -->
+    <path d="M 0 80 L 20 20 L 40 20 L 60 80 Z" fill="none" stroke="white" stroke-width="2"/>
+    <path d="M 10 80 L 25 35 L 35 35 L 50 80 Z" fill="none" stroke="white" stroke-width="2"/>
+    <path d="M 20 80 L 30 50 L 40 80 Z" fill="none" stroke="white" stroke-width="2"/>
+    
+    <!-- Сетчатый узор -->
+    <g stroke="white" stroke-width="1" opacity="0.7">
+      <line x1="15" y1="25" x2="45" y2="25"/>
+      <line x1="18" y1="30" x2="42" y2="30"/>
+      <line x1="21" y1="35" x2="39" y2="35"/>
+      <line x1="24" y1="40" x2="36" y2="40"/>
+      <line x1="27" y1="45" x2="33" y2="45"/>
+      
+      <!-- Диагональные линии -->
+      <line x1="20" y1="25" x2="25" y2="35"/>
+      <line x1="25" y1="25" x2="30" y2="35"/>
+      <line x1="30" y1="25" x2="35" y2="35"/>
+      <line x1="35" y1="25" x2="40" y2="35"/>
+      <line x1="40" y1="25" x2="35" y2="35"/>
+    </g>
+  </g>
+  
+  <!-- Вертикальная линия -->
+  <line x1="220" y1="20" x2="220" y2="100" stroke="white" stroke-width="3"/>
+  
+  <!-- Текст -->
+  <g fill="white" font-family="Arial, sans-serif" font-weight="bold">
+    <!-- Верхняя строка -->
+    <text x="240" y="35" font-size="16">ИНСТИТУТ</text>
+    
+    <!-- Вторая строка -->
+    <text x="240" y="55" font-size="16">УПРАВЛЕНИЯ</text>
+    
+    <!-- Третья строка -->
+    <text x="240" y="75" font-size="16">И ЦИФРОВЫХ</text>
+    
+    <!-- Четвертая строка -->
+    <text x="240" y="95" font-size="16">ТЕХНОЛОГИЙ</text>
+  </g>
+</svg>
