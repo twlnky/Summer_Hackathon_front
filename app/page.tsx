@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { 
   Box, 
   Container, 
@@ -52,7 +52,7 @@ import { Department, User } from './types';
 import DepartmentService from './services/departmentService';
 import UserService from './services/userService';
 
-const HomePage = () => {
+const HomePageContent = () => {
   const [activeTab, setActiveTab] = useState<string>('home');
   const theme = useTheme();
   const searchParams = useSearchParams();
@@ -411,6 +411,24 @@ const HomePage = () => {
       <AppBar onMenuItemClick={handleTabChange} />
       {renderContent()}
     </Box>
+  );
+};
+
+const HomePage = () => {
+  return (
+    <Suspense fallback={
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '100vh',
+        background: '#f8fafc',
+      }}>
+        <CircularProgress size={60} sx={{ color: '#2563eb' }} />
+      </Box>
+    }>
+      <HomePageContent />
+    </Suspense>
   );
 };
 

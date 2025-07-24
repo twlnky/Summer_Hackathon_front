@@ -119,6 +119,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         const basicUser: UserWithRole = {
           id: 1,
+          username: authData.username,
+          authorities: [],
           firstName: userRole === 'ADMIN' ? 'Администратор' : userRole === 'MODERATOR' ? 'Модератор' : authData.username.split('.')[0] || 'Пользователь',
           lastName: userRole === 'ADMIN' ? 'Системы' : userRole === 'MODERATOR' ? 'Модератор' : authData.username.split('.')[1] || 'Системы',
           email: authData.username,
@@ -166,25 +168,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
-};
-
-  const logout = (): void => {
-    AuthService.logout();
-    setIsAuthenticated(false);
-    setUser(null);
-    localStorage.removeItem('user');
-  };
-
-  const value: AuthContextType = {
-    isAuthenticated,
-    user,
-    login,
-    register,
-    logout,
-    loading,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export default AuthProvider; 
