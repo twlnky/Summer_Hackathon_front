@@ -117,7 +117,7 @@ npm start
 ### API URL
 Базовый URL для API настроен в файле `app/services/api.ts`:
 ```typescript
-const BASE_URL = 'http://localhost:8080/api/v1';
+const BASE_URL = 'http://5.129.192.141:8080/api/v1';
 ```
 
 ### Аутентификация

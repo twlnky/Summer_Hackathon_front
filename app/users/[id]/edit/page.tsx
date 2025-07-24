@@ -1,34 +1,31 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Box, Typography, Container, Button, CircularProgress, Alert } from '@mui/material';
 import { ArrowBack } from '@mui/icons-material';
 import UserForm from '../../../components/forms/UserForm';
 import UserService from '../../../services/userService';
 import { User } from '../../../types';
 
-interface EditUserPageProps {
-  params: {
-    id: string;
-  };
-}
-
-const EditUserPage: React.FC<EditUserPageProps> = ({ params }) => {
+const EditUserPage: React.FC = () => {
+  const params = useParams();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
 
+  const userId = typeof params.id === 'string' ? parseInt(params.id) : null;
+
   useEffect(() => {
     const fetchUser = async () => {
-      try {
-        const userId = parseInt(params.id);
-        if (isNaN(userId)) {
-          setError('Неверный ID пользователя');
-          return;
-        }
+      if (!userId) {
+        setError('Неверный ID пользователя');
+        setLoading(false);
+        return;
+      }
 
+      try {
         const userData = await UserService.getUserById(userId);
         setUser(userData);
       } catch (err: any) {
@@ -40,7 +37,7 @@ const EditUserPage: React.FC<EditUserPageProps> = ({ params }) => {
     };
 
     fetchUser();
-  }, [params.id]);
+  }, [userId]);
 
   const handleUserSave = (savedUser: User) => {
     // Перенаправляем на страницу пользователя после редактирования
@@ -49,7 +46,11 @@ const EditUserPage: React.FC<EditUserPageProps> = ({ params }) => {
 
   const handleCancel = () => {
     // Возвращаемся к странице пользователя
-    router.push(`/users/${params.id}`);
+    if (userId) {
+      router.push(`/users/${userId}`);
+    } else {
+      router.push('/users');
+    }
   };
 
   if (loading) {
