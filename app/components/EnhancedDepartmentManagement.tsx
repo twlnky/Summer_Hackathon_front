@@ -21,6 +21,7 @@ import {
   DialogActions,
   Tooltip,
   Snackbar,
+  Chip,
 } from '@mui/material';
 import {
   Business,
@@ -29,12 +30,12 @@ import {
   Edit,
   Delete,
   Description,
-  Group,
 } from '@mui/icons-material';
 import { Department, PageResult } from '../types';
 import DepartmentService from '../services/departmentService';
 import { useAuth } from '../contexts/AuthContext';
 import DepartmentForm from './forms/DepartmentForm';
+import RoleService from '../services/roleService';
 
 const EnhancedDepartmentManagement: React.FC = () => {
   const router = useRouter();
@@ -70,67 +71,51 @@ const EnhancedDepartmentManagement: React.FC = () => {
   const pageSize = 12;
 
   const checkUserPermissions = () => {
-    console.log('=== DEPARTMENTS checkUserPermissions called ===');
-    console.log('isAuthenticated:', isAuthenticated);
-    console.log('currentUser:', currentUser);
     if (isAuthenticated && currentUser) {
-      console.log('Checking permissions for user:', currentUser);
-      console.log('User role:', currentUser.role);
-      
-      // Только админы могут создавать и удалять департаменты
-      // Модераторы могут только редактировать свой департамент
-      const hasPermissions = currentUser.role === 'ADMIN';
-      console.log('Can manage departments (ADMIN only):', hasPermissions);
-      setCanManageDepartments(hasPermissions);
+      // Админы могут создавать департаменты. Модераторы - нет.
+      const hasCreatePermissions = RoleService.canCreateDepartments(currentUser);
+      setCanManageDepartments(hasCreatePermissions);
     } else {
-      console.log('User not authenticated or currentUser is null');
       setCanManageDepartments(false);
     }
-    console.log('=== DEPARTMENTS checkUserPermissions end ===');
   };
 
   // Функция для проверки, может ли пользователь редактировать конкретный департамент
   const canEditDepartment = (department: Department) => {
     if (!isAuthenticated || !currentUser) return false;
     
-    // Админы могут редактировать любой департамент
-    if (currentUser.role === 'ADMIN') return true;
-    
-    // Модераторы могут редактировать только свой департамент
-    if (currentUser.role === 'MODERATOR') {
-      return department.moderatorId === currentUser.id;
-    }
-    
-    return false;
+    // Используем RoleService для проверки, сравнивая логины
+    return RoleService.canEditDepartment(currentUser, department.moderatorLogin);
   };
 
   // Функция для проверки, может ли пользователь удалить конкретный департамент
   const canDeleteDepartment = (department: Department) => {
     if (!isAuthenticated || !currentUser) return false;
     
-    // Только админы могут удалять департаменты
-    return currentUser.role === 'ADMIN';
+    // Используем RoleService для проверки
+    return RoleService.canDeleteDepartment(currentUser);
   };
 
   const fetchDepartments = useCallback(async () => {
     setLoading(true);
     setError('');
+    
     try {
       const filter = debouncedSearchQuery ? { name: debouncedSearchQuery } : {};
       const result = await DepartmentService.getDepartments(
         filter,
         { page: page - 1, size: pageSize }
       );
+      
       setDepartments(result.queryResult || []);
       setTotalPages(result.pageCount || 0);
-    } catch (err: any) {
-      console.error('Ошибка при загрузке департаментов:', err);
-      setError(err.response?.data?.message || 'Ошибка при загрузке департаментов');
-      setDepartments([]);
+    } catch (error: any) {
+      console.error('Error fetching departments:', error);
+      setError(error.message || 'Ошибка при загрузке департаментов');
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearchQuery, page, pageSize]);
+  }, [page, debouncedSearchQuery]);
 
   // Debounce для поискового запроса
   useEffect(() => {
@@ -144,11 +129,8 @@ const EnhancedDepartmentManagement: React.FC = () => {
 
   useEffect(() => {
     checkUserPermissions();
-  }, [isAuthenticated, currentUser]);
-
-  useEffect(() => {
     fetchDepartments();
-  }, [fetchDepartments]);
+  }, [isAuthenticated, currentUser, fetchDepartments]);
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(event.target.value);
@@ -187,9 +169,12 @@ const EnhancedDepartmentManagement: React.FC = () => {
       setEditDialogOpen(false);
       setSelectedDepartment(null);
       
+      // Определяем операцию по наличию selectedDepartment
+      const isEdit = !!selectedDepartment;
+      
       setSnackbar({
         open: true,
-        message: selectedDepartment ? 'Департамент успешно обновлен' : 'Департамент успешно создан',
+        message: isEdit ? 'Департамент успешно обновлен' : 'Департамент успешно создан',
         severity: 'success'
       });
     } catch (error) {
@@ -257,7 +242,9 @@ const EnhancedDepartmentManagement: React.FC = () => {
           }}>
             Управление департаментами
           </Typography>
-          {isAuthenticated && currentUser && canManageDepartments && currentUser.role === 'ADMIN' && (
+          
+          {/* Показываем кнопку добавления только админам */}
+          {isAuthenticated && currentUser && RoleService.canCreateDepartments(currentUser) && (
             <Button
               variant="contained"
               startIcon={<Add />}
@@ -278,6 +265,22 @@ const EnhancedDepartmentManagement: React.FC = () => {
             >
               Добавить департамент
             </Button>
+          )}
+          
+          {/* Информационное сообщение для неавторизованных */}
+          {!isAuthenticated && (
+            <Typography variant="body2" sx={{ color: '#64748b', fontStyle: 'italic' }}>
+            </Typography>
+          )}
+          
+          {/* Информационное сообщение для пользователей без прав */}
+          {isAuthenticated && currentUser && !RoleService.canCreateDepartments(currentUser) && (
+            <Typography variant="body2" sx={{ color: '#64748b', fontStyle: 'italic' }}>
+              {RoleService.isModerator(currentUser) ? 
+                '' :
+                ''
+              }
+            </Typography>
           )}
         </Box>
 
@@ -344,128 +347,131 @@ const EnhancedDepartmentManagement: React.FC = () => {
                 gap: 3,
                 mb: 4
               }}>
-                {departments.map((department) => (
-                  <Card
-                    key={department.id}
-                    onClick={() => handleDepartmentClick(department)}
-                    sx={{
-                      cursor: 'pointer',
-                      borderRadius: 3,
-                      background: 'rgba(255, 255, 255, 0.9)',
-                      backdropFilter: 'blur(20px)',
-                      border: '1px solid rgba(59, 130, 246, 0.1)',
-                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
-                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: '0 12px 40px rgba(59, 130, 246, 0.15)',
-                        background: 'rgba(255, 255, 255, 1)',
-                      },
-                      '&:active': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: '0 15px 35px rgba(59, 130, 246, 0.2)',
-                      }
-                    }}
-                  >
-                    <CardContent sx={{ p: 3 }}>
-                      {/* Заголовок карточки с кнопками действий */}
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3 }}>
-                        <Box sx={{ flexGrow: 1 }}>
-                          <Typography
-                            variant="h6"
+                {departments.map((department) => {
+                    // Определяем, является ли текущий пользователь модератором этого департамента по логину
+                    const isOwner = currentUser?.role === 'MODERATOR' && department.moderatorLogin === currentUser.username;
+                    
+                    return (
+                    <Card
+                      key={department.id}
+                      onClick={() => router.push(`/department/${department.id}`)}
+                      sx={{
+                        borderRadius: 4,
+                        background: isOwner ? 'linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%)' : 'rgba(255, 255, 255, 0.9)',
+                        border: isOwner ? '2px solid #38bdf8' : '1px solid rgba(59, 130, 246, 0.1)',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: isOwner ? '0 10px 25px rgba(56, 189, 248, 0.2)' : '0 4px 12px rgba(0, 0, 0, 0.05)',
+                        '&:hover': {
+                          transform: 'translateY(-8px)',
+                          boxShadow: isOwner ? '0 15px 35px rgba(56, 189, 248, 0.3)' : '0 25px 50px rgba(59, 130, 246, 0.15)',
+                          border: isOwner ? '2px solid #0284c7' : '1px solid rgba(59, 130, 246, 0.3)',
+                          background: isOwner ? 'linear-gradient(135deg, #bae6fd 0%, #e0f2fe 100%)' : 'rgba(255, 255, 255, 1)',
+                        },
+                        position: 'relative',
+                      }}
+                    >
+                      {isOwner && (
+                        <Tooltip title="Ваш департамент">
+                          <Chip 
+                            label="Мой департамент" 
+                            size="small"
                             sx={{
-                              fontWeight: 700,
-                              color: '#1e293b',
-                              lineHeight: 1.2,
-                              mb: 1,
-                            }}
-                          >
-                            {department.name}
-                          </Typography>
-                          {department.description && (
+                              position: 'absolute',
+                              top: 12,
+                              left: 12,
+                              background: 'linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%)',
+                              color: 'white',
+                              fontWeight: 600,
+                              boxShadow: '0 4px 10px rgba(56, 189, 248, 0.4)',
+                            }} 
+                          />
+                        </Tooltip>
+                      )}
+                      
+                      <CardContent sx={{ p: 3, pt: isOwner ? 5 : 3 }}>
+                        {/* Заголовок карточки с кнопками действий */}
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                          <Box sx={{ flexGrow: 1 }}>
                             <Typography
-                              variant="body2"
+                              variant="h6"
                               sx={{
-                                color: '#64748b',
-                                fontWeight: 500,
-                                display: '-webkit-box',
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
+                                fontWeight: 700,
+                                color: '#1e293b',
+                                lineHeight: 1.2,
+                                mb: 1,
                               }}
                             >
-                              {department.description}
+                              {department.name}
                             </Typography>
-                          )}
-                        </Box>
-                        
-                        {/* Кнопки управления */}
-                        <Box sx={{ display: 'flex', gap: 0.5, ml: 2 }}>
-                          <Tooltip title="Управление сотрудниками">
-                            <IconButton
-                              size="small"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                router.push(`/department/${department.id}`);
-                              }}
-                              sx={{
-                                color: '#10b981',
-                                '&:hover': {
-                                  backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                                }
-                              }}
-                            >
-                              <Group fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          {/* Кнопка редактирования - для админов всегда, для модераторов только их департамент */}
-                          {canEditDepartment(department) && (
-                            <Tooltip title="Редактировать">
-                              <IconButton
-                                size="small"
-                                onClick={(event) => handleEditDepartment(department, event)}
+                            {department.description && (
+                              <Typography
+                                variant="body2"
                                 sx={{
-                                  color: '#3b82f6',
-                                  '&:hover': {
-                                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                                  }
+                                  color: '#64748b',
+                                  fontWeight: 500,
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
                                 }}
                               >
-                                <Edit fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          )}
-                          {/* Кнопка удаления - только для админов */}
-                          {canDeleteDepartment(department) && (
-                            <Tooltip title="Удалить">
-                              <IconButton
-                                size="small"
-                                onClick={(event) => handleDeleteDepartment(department, event)}
-                                sx={{
-                                  color: '#ef4444',
-                                  '&:hover': {
-                                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                                  }
-                                }}
-                              >
-                                <Delete fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          )}
+                                {department.description}
+                              </Typography>
+                            )}
+                          </Box>
+                          
+                          {/* Кнопки управления */}
+                          <Box sx={{ display: 'flex', gap: 0.5, ml: 2 }}>
+                            {/* Кнопка редактирования - для админов всегда, для модераторов только их департамент */}
+                            {canEditDepartment(department) && (
+                              <Tooltip title="Редактировать">
+                                <IconButton
+                                  size="small"
+                                  onClick={(event) => handleEditDepartment(department, event)}
+                                  sx={{
+                                    color: '#3b82f6',
+                                    '&:hover': {
+                                      backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                    }
+                                  }}
+                                >
+                                  <Edit fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                            {/* Кнопка удаления - только для админов */}
+                            {canDeleteDepartment(department) && (
+                              <Tooltip title="Удалить">
+                                <IconButton
+                                  size="small"
+                                  onClick={(event) => handleDeleteDepartment(department, event)}
+                                  sx={{
+                                    color: '#ef4444',
+                                    '&:hover': {
+                                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                    }
+                                  }}
+                                >
+                                  <Delete fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
                         </Box>
-                      </Box>
 
-                      {/* Дополнительная информация */}
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Business sx={{ color: '#3b82f6', mr: 1.5, fontSize: '1.2rem' }} />
-                        <Typography variant="body2" sx={{ color: '#374151', fontWeight: 500 }}>
-                          ID: {department.id}
-                        </Typography>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                ))}
+                        {/* Дополнительная информация */}
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Business sx={{ color: '#3b82f6', mr: 1.5, fontSize: '1.2rem' }} />
+                          <Typography variant="body2" sx={{ color: '#374151', fontWeight: 500 }}>
+                            ID: {department.id}
+                          </Typography>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </Box>
 
               {/* Пагинация */}

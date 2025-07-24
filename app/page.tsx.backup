@@ -286,8 +286,6 @@ const HomePage = () => {
                     Добро пожаловать в систему РУТ МИИТ
                   </Typography>
                   <Typography variant="body1" sx={{ mb: 3, opacity: 0.9 }}>
-                    Вы просматриваете систему в режиме только для чтения. 
-                    Войдите в систему для управления департаментами и пользователями.
                   </Typography>
                   <Button 
                     variant="contained"

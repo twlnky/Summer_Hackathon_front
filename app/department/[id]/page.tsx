@@ -45,6 +45,7 @@ import { Department, User } from '../../types';
 import DepartmentService from '../../services/departmentService';
 import UserService from '../../services/userService';
 import { useAuth } from '../../contexts/AuthContext';
+import UserForm from '../../components/forms/UserForm';
 
 const DepartmentPage: React.FC = () => {
   const params = useParams();
@@ -97,127 +98,25 @@ const DepartmentPage: React.FC = () => {
   const fetchDepartmentData = async () => {
     setDataLoading(true);
     setError('');
-
+    
     try {
-      console.log('fetchDepartmentData: Начинаем загрузку данных для департамента:', departmentId);
+      const departmentData = await DepartmentService.getDepartmentById(departmentId);
+      setDepartment(departmentData);
       
-      let foundDepartment: Department | null = null;
-      
-      // Получаем информацию о департаменте НАПРЯМУЮ по ID
-      console.log('fetchDepartmentData: Используем прямой запрос getDepartmentById:', departmentId);
-      try {
-        foundDepartment = await DepartmentService.getDepartmentById(departmentId);
-        console.log('fetchDepartmentData: Найденный департамент (прямой запрос):', foundDepartment);
-        console.log('fetchDepartmentData: ID найденного департамента:', foundDepartment.id);
-        console.log('fetchDepartmentData: Ожидаемый ID:', departmentId);
-        
-        if (foundDepartment.id !== departmentId) {
-          console.error('ОШИБКА: ID найденного департамента не совпадает с ожидаемым!');
-          console.error('Ожидали:', departmentId, 'Получили:', foundDepartment.id);
-        }
-        
-        setDepartment(foundDepartment);
-        console.log('fetchDepartmentData: Департамент установлен:', foundDepartment);
-      } catch (deptErr: any) {
-        console.error('fetchDepartmentData: Ошибка при прямом запросе департамента:', deptErr);
-        console.error('fetchDepartmentData: Статус ошибки:', deptErr.response?.status);
-        console.error('fetchDepartmentData: Данные ошибки:', deptErr.response?.data);
-        
-        // Если департамент не найден (404) или есть ошибка сервера (500), показываем ошибку
-        if (deptErr.response?.status === 404) {
-          setError(`Департамент с ID ${departmentId} не найден`);
-          return;
-        } else if (deptErr.response?.status === 500) {
-          setError(`Ошибка сервера при загрузке департамента с ID ${departmentId}`);
-          return;
-        }
-        
-        // Только для других ошибок пробуем fallback
-        console.log('fetchDepartmentData: Пытаемся использовать фильтрацию как fallback');
-        try {
-          const departmentResponse = await DepartmentService.getDepartments(
-            { id: departmentId },
-            { page: 0, size: 1 }
-          );
-          
-          console.log('fetchDepartmentData: Ответ департамента (фильтрация):', departmentResponse);
-          console.log('fetchDepartmentData: Найдено департаментов:', departmentResponse.queryResult.length);
-          
-          if (departmentResponse.queryResult.length > 0) {
-            foundDepartment = departmentResponse.queryResult[0];
-            console.log('fetchDepartmentData: Найденный департамент (фильтрация):', foundDepartment);
-            
-            // Проверяем, что ID совпадает
-            if (foundDepartment.id !== departmentId) {
-              console.error('КРИТИЧЕСКАЯ ОШИБКА: Фильтрация вернула департамент с неправильным ID!');
-              console.error('Запрашивали ID:', departmentId, 'Получили ID:', foundDepartment.id);
-              setError(`Департамент с ID ${departmentId} не найден. Сервер вернул департамент с ID ${foundDepartment.id}`);
-              return;
-            }
-            
-            setDepartment(foundDepartment);
-          } else {
-            console.log('fetchDepartmentData: Департамент не найден через фильтрацию');
-            setError(`Департамент с ID ${departmentId} не найден`);
-            return;
-          }
-        } catch (fallbackErr: any) {
-          console.error('fetchDepartmentData: Ошибка при fallback запросе:', fallbackErr);
-          setError(`Департамент с ID ${departmentId} не найден`);
-          return;
-        }
-      }
-      
-      if (!foundDepartment) {
-        setError(`Департамент с ID ${departmentId} не найден`);
-        return;
-      }
-
-      // Получаем пользователей департамента с принудительным обновлением
-      console.log('fetchDepartmentData: Загружаем пользователей департамента...');
+      // Загружаем пользователей департамента
       const usersResponse = await DepartmentService.getUsersByDepartment(
         departmentId,
         {},
-        { page: 0, size: 1000 }, // Загружаем всех пользователей
-        { sortBy: ['id:asc'] }
+        { page: 0, size: 1000 }
       );
-      
-      console.log('fetchDepartmentData: Ответ пользователей:', usersResponse);
       setUsers(usersResponse.queryResult);
       setUsersTotalCount(usersResponse.totalElements || usersResponse.queryResult.length);
-      console.log('fetchDepartmentData: Установлено пользователей:', usersResponse.queryResult.length);
       
-      // Сбрасываем количество отображаемых пользователей при обновлении данных
-      if (!departmentSearchQuery) {
-        setDisplayedUsersCount(6);
-      }
-
-      // Если есть модератор, получаем его данные
-      if (foundDepartment?.moderatorId) {
-        try {
-          const moderatorResponse = await UserService.getUsers(
-            { id: foundDepartment.moderatorId },
-            { page: 0, size: 1 }
-          );
-          if (moderatorResponse.queryResult.length > 0) {
-            setModerator(moderatorResponse.queryResult[0]);
-          }
-        } catch (moderatorErr) {
-          console.error('Ошибка при загрузке данных модератора:', moderatorErr);
-        }
-      }
-    } catch (err: any) {
-      console.error('fetchDepartmentData: Ошибка при загрузке данных:', err);
-      // Для анонимных пользователей логируем ошибку, но не показываем как критическую
-      if (err.response?.status === 401 && !isAuthenticated) {
-        console.log('Анонимный пользователь: для полного доступа необходима авторизация');
-        // Не устанавливаем error для анонимных пользователей
-      } else {
-        setError(err.response?.data?.message || 'Ошибка при загрузке данных');
-      }
+    } catch (error: any) {
+      console.error('Ошибка при загрузке данных департамента:', error);
+      setError(error.response?.data?.message || 'Ошибка при загрузке данных департамента');
     } finally {
       setDataLoading(false);
-      console.log('fetchDepartmentData: Загрузка завершена');
     }
   };
 
@@ -422,12 +321,12 @@ const DepartmentPage: React.FC = () => {
   const canManageUsers = () => {
     if (!isAuthenticated || !user) return false;
     
-    // Админы могут управлять пользователями везде
+    // Админы могут управлять пользователями в любом департаменте
     if (user.role === 'ADMIN') return true;
     
     // Модераторы могут управлять пользователями только в своем департаменте
     if (user.role === 'MODERATOR' && department) {
-      return department.moderatorId === user.id;
+      return department.moderatorLogin === user.username;
     }
     
     return false;
@@ -442,7 +341,7 @@ const DepartmentPage: React.FC = () => {
     // Модераторы могут редактировать пользователей только в своем департаменте
     // И не могут редактировать других модераторов и админов
     if (user.role === 'MODERATOR' && department) {
-      return department.moderatorId === user.id && 
+      return department.moderatorLogin === user.username && 
              userData.role !== 'ADMIN' && 
              userData.role !== 'MODERATOR';
     }
@@ -458,7 +357,7 @@ const DepartmentPage: React.FC = () => {
     
     // Модераторы могут удалять из своего департамента только обычных пользователей
     if (user.role === 'MODERATOR' && department) {
-      return department.moderatorId === user.id && 
+      return department.moderatorLogin === user.username && 
              userData.role !== 'ADMIN' && 
              userData.role !== 'MODERATOR';
     }
@@ -470,6 +369,13 @@ const DepartmentPage: React.FC = () => {
     console.log('Редактирование пользователя:', userData);
     setSelectedUser(userData);
     setEditDialogOpen(true);
+  };
+
+  const handleUserSaveSuccess = () => {
+    console.log('handleUserSaveSuccess: Пользователь успешно сохранен');
+    setEditDialogOpen(false);
+    setSelectedUser(null);
+    fetchDepartmentData(); // Обновляем данные департамента после сохранения
   };
 
   if (loading) {
@@ -1090,18 +996,18 @@ const DepartmentPage: React.FC = () => {
       <Dialog 
         open={editDialogOpen} 
         onClose={() => setEditDialogOpen(false)}
-        maxWidth="sm"
+        maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Редактировать пользователя</DialogTitle>
-        <DialogContent>
-          {/* Add form fields here */}
-          <Typography>Форма редактирования пользователя</Typography>
+        <DialogContent sx={{ p: 2 }}>
+          {selectedUser && (
+            <UserForm 
+              user={selectedUser}
+              onSave={handleUserSaveSuccess}
+              onCancel={() => setEditDialogOpen(false)}
+            />
+          )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)}>Отмена</Button>
-          <Button variant="contained">Сохранить</Button>
-        </DialogActions>
       </Dialog>
 
       {/* Add User Dialog */}

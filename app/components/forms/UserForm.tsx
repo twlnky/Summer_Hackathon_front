@@ -20,6 +20,7 @@ import { Person, Save, Cancel } from '@mui/icons-material';
 import { User, Department } from '../../types';
 import UserService from '../../services/userService';
 import DepartmentService from '../../services/departmentService';
+import RoleService from '../../services/roleService';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface UserFormProps {
@@ -49,6 +50,10 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSave, onCancel, loading = f
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [submitLoading, setSubmitLoading] = useState(false);
   const [departmentsLoading, setDepartmentsLoading] = useState(false);
+
+  // Проверяем права доступа
+  const canCreateUser = RoleService.canCreateUsers(currentUser);
+  const canEditUser = user ? RoleService.canModifyUser(currentUser, user) : canCreateUser;
 
   useEffect(() => {
     if (user) {
@@ -135,10 +140,24 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSave, onCancel, loading = f
       return;
     }
 
-    // Проверяем авторизацию
+    // Проверяем авторизацию и права
     if (!isAuthenticated) {
       setErrors({
         submit: 'Необходимо войти в систему для создания/редактирования пользователей'
+      });
+      return;
+    }
+
+    if (!user && !canCreateUser) {
+      setErrors({
+        submit: 'Недостаточно прав для создания пользователя. Требуются права администратора.'
+      });
+      return;
+    }
+
+    if (user && !canEditUser) {
+      setErrors({
+        submit: 'Недостаточно прав для редактирования этого пользователя.'
       });
       return;
     }
@@ -243,6 +262,34 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSave, onCancel, loading = f
             </Alert>
           )}
 
+          {isAuthenticated && !canCreateUser && !user && (
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mb: 3,
+                borderRadius: 2,
+                background: 'rgba(239, 68, 68, 0.05)',
+                border: '1px solid rgba(239, 68, 68, 0.1)',
+              }}
+            >
+              Только администраторы могут создавать новых пользователей
+            </Alert>
+          )}
+
+          {isAuthenticated && user && !canEditUser && (
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mb: 3,
+                borderRadius: 2,
+                background: 'rgba(239, 68, 68, 0.05)',
+                border: '1px solid rgba(239, 68, 68, 0.1)',
+              }}
+            >
+              У вас нет прав для редактирования этого пользователя
+            </Alert>
+          )}
+
           <form onSubmit={handleSubmit}>
             {/* Основная информация */}
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: '#374151' }}>
@@ -257,6 +304,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSave, onCancel, loading = f
                 onChange={handleChange('firstName')}
                 error={!!errors.firstName}
                 helperText={errors.firstName}
+                disabled={!canCreateUser && !canEditUser}
                 sx={{ 
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 2,
@@ -270,6 +318,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSave, onCancel, loading = f
                 onChange={handleChange('lastName')}
                 error={!!errors.lastName}
                 helperText={errors.lastName}
+                disabled={!canCreateUser && !canEditUser}
                 sx={{ 
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 2,
@@ -283,6 +332,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSave, onCancel, loading = f
               label="Отчество"
               value={formData.middleName}
               onChange={handleChange('middleName')}
+              disabled={!canCreateUser && !canEditUser}
               sx={{ 
                 mb: 3,
                 '& .MuiOutlinedInput-root': {
@@ -296,40 +346,38 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSave, onCancel, loading = f
               Контактная информация
             </Typography>
 
-            <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-              <TextField
-                fullWidth
-                label="Email *"
-                type="email"
-                value={formData.email}
-                onChange={handleChange('email')}
-                error={!!errors.email}
-                helperText={errors.email}
-                sx={{ 
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                  }
-                }}
-              />
-              <TextField
-                fullWidth
-                label="Телефон"
-                value={formData.personalPhone}
-                onChange={handleChange('personalPhone')}
-                error={!!errors.personalPhone}
-                helperText={errors.personalPhone}
-                sx={{ 
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                  }
-                }}
-              />
-            </Box>
+            <TextField
+              fullWidth
+              label="Email *"
+              type="email"
+              value={formData.email}
+              onChange={handleChange('email')}
+              error={!!errors.email}
+              helperText={errors.email}
+              disabled={!canCreateUser && !canEditUser}
+              sx={{ 
+                mb: 3,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                }
+              }}
+            />
 
-            {/* Рабочая информация */}
-            <Typography variant="h6" sx={{ mb: 2, mt: 2, fontWeight: 600, color: '#374151' }}>
-              Рабочая информация
-            </Typography>
+            <TextField
+              fullWidth
+              label="Личный телефон"
+              value={formData.personalPhone}
+              onChange={handleChange('personalPhone')}
+              error={!!errors.personalPhone}
+              helperText={errors.personalPhone}
+              disabled={!canCreateUser && !canEditUser}
+              sx={{ 
+                mb: 3,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                }
+              }}
+            />
 
             <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
               <TextField
@@ -337,6 +385,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSave, onCancel, loading = f
                 label="Должность"
                 value={formData.position}
                 onChange={handleChange('position')}
+                disabled={!canCreateUser && !canEditUser}
                 sx={{ 
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 2,
@@ -350,6 +399,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSave, onCancel, loading = f
                 onChange={handleChange('officeNumber')}
                 error={!!errors.officeNumber}
                 helperText={errors.officeNumber}
+                disabled={!canCreateUser && !canEditUser}
                 sx={{ 
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 2,
@@ -360,7 +410,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSave, onCancel, loading = f
 
             <FormControl 
               fullWidth 
-              disabled={departmentsLoading}
+              disabled={departmentsLoading || (!canCreateUser && !canEditUser)}
               sx={{ mb: 3 }}
             >
               <InputLabel>Отдел</InputLabel>
@@ -387,11 +437,12 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSave, onCancel, loading = f
 
             <TextField
               fullWidth
-              label="Заметки"
+              label="Примечания"
               multiline
               rows={3}
               value={formData.note}
               onChange={handleChange('note')}
+              disabled={!canCreateUser && !canEditUser}
               sx={{ 
                 mb: 3,
                 '& .MuiOutlinedInput-root': {
@@ -421,7 +472,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSave, onCancel, loading = f
                 type="submit"
                 variant="contained"
                 startIcon={submitLoading ? <CircularProgress size={20} color="inherit" /> : <Save />}
-                disabled={submitLoading || loading || !isAuthenticated}
+                disabled={submitLoading || loading || !isAuthenticated || (!canCreateUser && !canEditUser)}
                 sx={{
                   background: 'linear-gradient(135deg, #3b82f6 0%, #38bdf8 100%)',
                   borderRadius: 2,

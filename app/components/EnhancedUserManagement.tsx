@@ -34,7 +34,12 @@ import {
   Delete,
   MoreVert,
 } from '@mui/icons-material';
-import { User, PageResult, Department } from '../types';
+import {
+  User,
+  PageResult,
+  Department,
+  UserWithRole
+} from '../types';
 import UserService from '../services/userService';
 import DepartmentService from '../services/departmentService';
 import RoleService from '../services/roleService';
@@ -44,7 +49,7 @@ import UserForm from './forms/UserForm';
 
 const EnhancedUserManagement: React.FC = () => {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user: currentUser } = useAuth();
   const [users, setUsers] = useState<PageResult<User> | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [moderatorIds, setModeratorIds] = useState<number[]>([]);
@@ -111,22 +116,13 @@ const EnhancedUserManagement: React.FC = () => {
   };
 
   const checkUserPermissions = () => {
-    console.log('=== checkUserPermissions called ===');
-    console.log('isAuthenticated:', isAuthenticated);
-    console.log('user:', user);
-    if (isAuthenticated && user) {
-      console.log('Checking permissions for user:', user);
-      console.log('User role:', user.role);
-      
-      // Используем RoleService для проверки прав
-      const hasPermissions = RoleService.canManageUsers(user);
-      console.log('Can manage users (ADMIN only):', hasPermissions);
+    if (isAuthenticated && currentUser) {
+      // Только админы могут создавать пользователей. Модераторы - нет.
+      const hasPermissions = RoleService.canCreateUsers(currentUser);
       setCanManageUsers(hasPermissions);
     } else {
-      console.log('User not authenticated or user is null');
       setCanManageUsers(false);
     }
-    console.log('=== checkUserPermissions end ===');
   };
 
   const fetchUsers = useCallback(async () => {
@@ -164,28 +160,6 @@ const EnhancedUserManagement: React.FC = () => {
         );
       }
       
-      console.log('=== FETCH USERS API RESPONSE ===');
-      console.log('API Response result:', result);
-      console.log('Users array:', result.queryResult);
-      console.log('Moderator IDs from departments:', moderatorIds);
-      console.log('First user detailed:', result.queryResult[0]);
-      if (result.queryResult.length > 0) {
-        result.queryResult.forEach((user, index) => {
-          console.log(`User ${index + 1}:`, {
-            id: user.id,
-            name: `${user.firstName} ${user.lastName}`,
-            email: user.email,
-            originalRole: user.role,
-            moderatorId: user.moderatorId,
-            isInModeratorsList: moderatorIds.includes(user.id),
-            allFields: Object.keys(user),
-            fullUser: user
-          });
-          console.log(`User ${index + 1} будет определен как:`, determineUserRole(user));
-        });
-      }
-      console.log('=== END API RESPONSE DEBUG ===');
-      
       setUsers(result);
     } catch (err: any) {
       console.error('Ошибка при загрузке пользователей:', err);
@@ -193,7 +167,7 @@ const EnhancedUserManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearchQuery, page, pageSize, moderatorIds]);
+  }, [debouncedSearchQuery, page, pageSize]);
 
   // Debounce для поискового запроса
   useEffect(() => {
@@ -209,11 +183,14 @@ const EnhancedUserManagement: React.FC = () => {
   useEffect(() => {
     checkUserPermissions();
     fetchDepartments();
-  }, [isAuthenticated, user, fetchDepartments]);
+  }, [isAuthenticated, currentUser, fetchDepartments]);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    // Загружаем пользователей после загрузки департаментов
+    if (departments.length > 0) {
+      fetchUsers();
+    }
+  }, [departments, fetchUsers]);
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(event.target.value);
@@ -231,6 +208,7 @@ const EnhancedUserManagement: React.FC = () => {
   };
 
   const handleAddUser = () => {
+    console.log('handleAddUser called');
     setSelectedUser(null);
     setAddDialogOpen(true);
   };
@@ -238,6 +216,20 @@ const EnhancedUserManagement: React.FC = () => {
   const handleEditUser = (user: User, event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
+    
+    // Модераторы могут быть перенаправлены на страницу департамента для редактирования
+    if (currentUser?.role === 'MODERATOR') {
+      const userDepartmentId = user.departmentsIds?.[0];
+      if (userDepartmentId) {
+        // Проверяем, является ли модератор владельцем этого департамента, по логину
+        const department = departments.find(d => d.id === userDepartmentId);
+        if (department?.moderatorLogin === currentUser.username) {
+          router.push(`/department/${userDepartmentId}`);
+          return; // Прерываем выполнение
+        }
+      }
+    }
+    // Админы и остальные случаи - открываем диалог редактирования
     setSelectedUser(user);
     setEditDialogOpen(true);
   };
@@ -322,6 +314,20 @@ const EnhancedUserManagement: React.FC = () => {
     return RoleService.getRoleColor(role);
   };
 
+  const userCanBeManagedByModerator = (moderator: UserWithRole, targetUser: User) => {
+    if (moderator.role !== 'MODERATOR') return false;
+    
+    // Получаем ID департаментов, которыми управляет модератор, по его логину
+    const moderatorDepartmentIds = departments
+      .filter(d => d.moderatorLogin === moderator.username)
+      .map(d => d.id);
+      
+    if (moderatorDepartmentIds.length === 0) return false;
+
+    // Проверяем, принадлежит ли пользователь хотя бы одному из департаментов модератора
+    return targetUser.departmentsIds?.some(id => moderatorDepartmentIds.includes(id));
+  };
+
   return (
     <Box sx={{ 
       background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
@@ -329,7 +335,7 @@ const EnhancedUserManagement: React.FC = () => {
       py: 4,
     }}>
       <Container maxWidth="lg">
-        {/* Заголовок */}
+        {/* Заголовок и кнопка добавления */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
           <Typography variant="h4" sx={{ 
             fontWeight: 700, 
@@ -341,27 +347,43 @@ const EnhancedUserManagement: React.FC = () => {
           }}>
             Управление пользователями
           </Typography>
-          {isAuthenticated && user && canManageUsers && user.role === 'ADMIN' && (
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={handleAddUser}
-              sx={{
-                background: 'linear-gradient(135deg, #3b82f6 0%, #38bdf8 100%)',
-                borderRadius: 3,
-                px: 3,
-                py: 1.5,
-                fontWeight: 600,
-                textTransform: 'none',
-                boxShadow: '0 8px 25px rgba(59, 130, 246, 0.3)',
-                '&:hover': {
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 12px 35px rgba(59, 130, 246, 0.4)',
-                }
-              }}
-            >
-              Добавить пользователя
-            </Button>
+          {/* Показываем кнопку добавления только админам */}
+          {(() => {
+            const canCreate = isAuthenticated && currentUser && RoleService.canCreateUsers(currentUser);
+            return canCreate && (
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={handleAddUser}
+                sx={{
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #38bdf8 100%)',
+                  borderRadius: 3,
+                  px: 3,
+                  py: 1.5,
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  boxShadow: '0 8px 25px rgba(59, 130, 246, 0.3)',
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 12px 35px rgba(59, 130, 246, 0.4)',
+                  }
+                }}
+              >
+                Добавить пользователя
+              </Button>
+            );
+          })()}
+          
+          {/* Информационное сообщение для неавторизованных */}
+          {!isAuthenticated && (
+            <Typography variant="body2" sx={{ color: '#64748b', fontStyle: 'italic' }}>
+            </Typography>
+          )}
+          
+          {/* Информационное сообщение для пользователей без прав */}
+          {isAuthenticated && currentUser && !RoleService.canCreateUsers(currentUser) && (
+            <Typography variant="body2" sx={{ color: '#64748b', fontStyle: 'italic' }}>
+            </Typography>
           )}
         </Box>
 
@@ -435,14 +457,14 @@ const EnhancedUserManagement: React.FC = () => {
                   gap: 3,
                   mb: 4
                 }}>
-                  {users.queryResult.map((user) => {
+                  {users.queryResult.map((userData) => {
                     // Определяем роль пользователя
-                    const userRole = determineUserRole(user);
+                    const userRole = determineUserRole(userData);
                     
                     return (
                     <Card
-                      key={user.id}
-                      onClick={(event) => handleViewUser(user.id, event)}
+                      key={userData.id}
+                      onClick={(event) => handleViewUser(userData.id, event)}
                       sx={{
                         borderRadius: 4,
                         background: 'rgba(255, 255, 255, 0.9)',
@@ -476,9 +498,9 @@ const EnhancedUserManagement: React.FC = () => {
                                 mb: 0.5,
                               }}
                             >
-                              {[user.lastName, user.firstName, user.middleName].filter(Boolean).join(' ')}
+                              {[userData.lastName, userData.firstName, userData.middleName].filter(Boolean).join(' ')}
                             </Typography>
-                            {user.position && (
+                            {userData.position && (
                               <Typography
                                 variant="body2"
                                 sx={{
@@ -487,55 +509,66 @@ const EnhancedUserManagement: React.FC = () => {
                                   mb: 1,
                                 }}
                               >
-                                {user.position}
+                                {userData.position}
                               </Typography>
                             )}
                           </Box>
                           
-                          {/* Кнопки управления */}
-                          {isAuthenticated && user && canManageUsers && user.role === 'ADMIN' && (
-                            <Box sx={{ display: 'flex', gap: 0.5, ml: 2 }}>
-                              <Tooltip title="Редактировать">
-                                <IconButton
-                                  size="small"
-                                  onClick={(event) => handleEditUser(user, event)}
-                                  sx={{
-                                    color: '#3b82f6',
-                                    '&:hover': {
-                                      backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                                    }
-                                  }}
-                                >
-                                  <Edit fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Удалить">
-                                <IconButton
-                                  size="small"
-                                  onClick={(event) => handleDeleteUser(user, event)}
-                                  sx={{
-                                    color: '#ef4444',
-                                    '&:hover': {
-                                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                                    }
-                                  }}
-                                >
-                                  <Delete fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            </Box>
-                          )}
+                          {/* Кнопки действий - админы видят всегда, модераторы - с условием */}
+                          {(() => {
+                            const isAdmin = RoleService.isAdmin(currentUser);
+                            const isModerator = RoleService.isModerator(currentUser);
+                            const canManage = currentUser ? userCanBeManagedByModerator(currentUser, userData) : false;
+                            // Показываем кнопки редактирования только администраторам
+                            const shouldShowButtons = isAuthenticated && currentUser && isAdmin;
+                            
+                            return shouldShowButtons && (
+                              <Box sx={{ display: 'flex', gap: 0.5, ml: 2 }}>
+                                <Tooltip title={RoleService.isModerator(currentUser) ? "Перейти в департамент для управления" : "Редактировать"}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={(event) => handleEditUser(userData, event)}
+                                    sx={{
+                                      color: '#3b82f6',
+                                      '&:hover': {
+                                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                      }
+                                    }}
+                                  >
+                                    <Edit fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                {/* Кнопка удаления - только для админов */}
+                                {RoleService.isAdmin(currentUser) && (
+                                  <Tooltip title="Удалить">
+                                    <IconButton
+                                      size="small"
+                                      onClick={(event) => handleDeleteUser(userData, event)}
+                                      sx={{
+                                        color: '#ef4444',
+                                        '&:hover': {
+                                          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                        }
+                                      }}
+                                    >
+                                      <Delete fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                              </Box>
+                            );
+                          })()}
                         </Box>
 
                         {/* Контактная информация */}
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                          {user.email && (
+                          {userData.email && (
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
                               <Email sx={{ color: '#3b82f6', mr: 1.5, fontSize: '1.2rem' }} />
                               <Typography
                                 variant="body2"
                                 component="a"
-                                href={`mailto:${user.email}`}
+                                href={`mailto:${userData.email}`}
                                 onClick={(e) => e.stopPropagation()}
                                 sx={{
                                   color: '#374151',
@@ -547,18 +580,18 @@ const EnhancedUserManagement: React.FC = () => {
                                   }
                                 }}
                               >
-                                {user.email}
+                                {userData.email}
                               </Typography>
                             </Box>
                           )}
 
-                          {user.personalPhone && (
+                          {userData.personalPhone && (
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
                               <Phone sx={{ color: '#10b981', mr: 1.5, fontSize: '1.2rem' }} />
                               <Typography
                                 variant="body2"
                                 component="a"
-                                href={`tel:${user.personalPhone}`}
+                                href={`tel:${userData.personalPhone}`}
                                 onClick={(e) => e.stopPropagation()}
                                 sx={{
                                   color: '#374151',
@@ -570,92 +603,52 @@ const EnhancedUserManagement: React.FC = () => {
                                   }
                                 }}
                               >
-                                {user.personalPhone}
-                              </Typography>
-                            </Box>
-                          )}
-
-                          {user.officeNumber && (
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Business sx={{ color: '#f59e0b', mr: 1.5, fontSize: '1.2rem' }} />
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  color: '#374151',
-                                  fontWeight: 500,
-                                }}
-                              >
-                                Офис: {user.officeNumber}
-                              </Typography>
-                            </Box>
-                          )}
-
-                          {user.departmentsIds && user.departmentsIds.length > 0 && (
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Business sx={{ color: '#8b5cf6', mr: 1.5, fontSize: '1.2rem' }} />
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  color: '#374151',
-                                  fontWeight: 500,
-                                }}
-                              >
-                                {getDepartmentName(user.departmentsIds)}
+                                {userData.personalPhone}
                               </Typography>
                             </Box>
                           )}
                         </Box>
                       </CardContent>
                     </Card>
-                    );
-                  })}
+                  );
+                })}
                 </Box>
 
                 {/* Пагинация */}
-                {users.pageCount > 1 && (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-                    <Pagination
-                      count={users.pageCount}
-                      page={page}
-                      onChange={handlePageChange}
-                      color="primary"
-                      size="large"
-                      sx={{
-                        '& .MuiPaginationItem-root': {
-                          borderRadius: 2,
-                          fontWeight: 600,
-                          '&.Mui-selected': {
-                            background: 'linear-gradient(135deg, #3b82f6 0%, #38bdf8 100%)',
-                            color: 'white',
-                            '&:hover': {
-                              background: 'linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%)',
-                            }
+                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                  <Pagination
+                    count={users.pageCount}
+                    page={page}
+                    onChange={handlePageChange}
+                    color="primary"
+                    size="large"
+                    sx={{
+                      '& .MuiPaginationItem-root': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        borderRadius: 3,
+                        border: '1px solid rgba(59, 130, 246, 0.1)',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        '&:hover': {
+                          borderColor: 'rgba(59, 130, 246, 0.3)',
+                          backgroundColor: 'rgba(255, 255, 255, 1)',
+                        },
+                        '&.Mui-selected': {
+                          backgroundColor: '#3b82f6',
+                          color: '#ffffff',
+                          borderColor: '#3b82f6',
+                          '&:hover': {
+                            backgroundColor: '#2563eb',
                           }
                         }
-                      }}
-                    />
-                  </Box>
-                )}
+                      }
+                    }}
+                  />
+                </Box>
               </>
             ) : (
-              <Box sx={{ 
-                textAlign: 'center', 
-                py: 8,
-                background: 'rgba(255, 255, 255, 0.9)',
-                borderRadius: 4,
-                border: '1px solid rgba(59, 130, 246, 0.1)',
-              }}>
-                <Person sx={{ fontSize: 80, color: '#94a3b8', mb: 2 }} />
-                <Typography variant="h6" color="text.secondary" sx={{ mb: 1, fontWeight: 600 }}>
-                  {searchQuery ? 'Пользователи не найдены' : 'Пользователи отсутствуют'}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {searchQuery 
-                    ? 'Попробуйте изменить поисковый запрос' 
-                    : 'Добавьте первого пользователя для начала работы'
-                  }
-                </Typography>
-              </Box>
+              <Typography variant="body1" sx={{ color: '#64748b', fontStyle: 'italic' }}>
+                Пользователи не найдены
+              </Typography>
             )}
           </>
         )}
@@ -668,13 +661,29 @@ const EnhancedUserManagement: React.FC = () => {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Добавить пользователя</DialogTitle>
-        <DialogContent>
-          <UserForm
-            onSave={handleUserSave}
-            onCancel={() => setAddDialogOpen(false)}
-            loading={actionLoading}
-          />
+        <DialogContent sx={{ pt: 2 }}>
+          {isAuthenticated && currentUser && RoleService.canCreateUsers(currentUser) ? (
+            <UserForm
+              onSave={handleUserSave}
+              onCancel={() => setAddDialogOpen(false)}
+              loading={actionLoading}
+            />
+          ) : (
+            <Box sx={{ p: 3, textAlign: 'center' }}>
+              <Typography variant="h6" color="error" sx={{ mb: 2 }}>
+                Недостаточно прав
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                Только администраторы могут создавать новых пользователей
+              </Typography>
+              <Button 
+                onClick={() => setAddDialogOpen(false)}
+                sx={{ mt: 2 }}
+              >
+                Закрыть
+              </Button>
+            </Box>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -685,15 +694,29 @@ const EnhancedUserManagement: React.FC = () => {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Редактировать пользователя</DialogTitle>
-        <DialogContent>
-          {selectedUser && (
+        <DialogContent sx={{ pt: 2 }}>
+          {isAuthenticated && currentUser && selectedUser && RoleService.isAdmin(currentUser) ? (
             <UserForm
               user={selectedUser}
               onSave={handleUserSave}
               onCancel={() => setEditDialogOpen(false)}
               loading={actionLoading}
             />
+          ) : (
+            <Box sx={{ p: 3, textAlign: 'center' }}>
+              <Typography variant="h6" color="error" sx={{ mb: 2 }}>
+                Недостаточно прав
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                Только администраторы могут редактировать пользователей
+              </Typography>
+              <Button 
+                onClick={() => setEditDialogOpen(false)}
+                sx={{ mt: 2 }}
+              >
+                Закрыть
+              </Button>
+            </Box>
           )}
         </DialogContent>
       </Dialog>
