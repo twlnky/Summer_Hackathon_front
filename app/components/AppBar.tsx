@@ -113,13 +113,36 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
     setAnchorEl(null);
   };
 
-  const handleLogout = () => {
-    logout();
-    setAnchorEl(null);
-    router.push('/login');
-  };
+    const handleLogout = async () => {
+        try {
+            console.log('AppBar: handleLogout started'); // <-- убедиться что этот лог появляется
+            setAnchorEl(null);
 
-  const handleDrawerToggle = () => {
+            // дополнительная отладочная проверка: что такое logout в контексте
+            try {
+                console.log('AppBar: logout value (from useAuth) =', typeof logout, logout ? logout.toString().slice(0,200) : logout);
+            } catch (e) {
+                console.log('AppBar: cannot stringify logout function', e);
+            }
+
+            // Если logout возвращает Promise, то await дождётся сетевого вызова.
+            // Если logout не делает сетевой вызов — мы всё равно увидим результат в логах ниже.
+            await logout?.();
+
+            console.log('AppBar: logout() completed (or returned). Now clearing local state and navigating.');
+
+            try { localStorage.removeItem('accessToken'); } catch (e) { /* ignore */ }
+
+            router.push('/login');
+        } catch (err) {
+            console.error('AppBar: logout error', err);
+            // Перенаправляем даже в случае ошибки, чтобы пользователь не застрял в UI
+            router.push('/login');
+        }
+    };
+
+
+    const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
 

@@ -1,47 +1,90 @@
+// apiClient.ts
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
-import Cookies from 'js-cookie';
+import Cookies from 'js-cookie'; // ✅ Добавлен импорт
 
-// Базовый URL для API
 const BASE_URL = 'http://localhost:8080/api/v1';
 
-// Создание axios экземпляра с базовой конфигурацией
 const apiClient: AxiosInstance = axios.create({
-  baseURL: BASE_URL,
-  withCredentials: false,  // Отключаем cookies чтобы избежать CORS проблем с публичными endpoints
-  headers: {
-    'Content-Type': 'application/json',
-  },
+    baseURL: BASE_URL,
+    withCredentials: false,
+    headers: {
+        'Content-Type': 'application/json',
+    },
 });
 
-// Интерцептор для добавления JWT токена к запросам
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+const subscribeTokenRefresh = (callback: (token: string) => void) => {
+    refreshSubscribers.push(callback);
+};
+
+const onRrefreshed = (token: string) => {
+    refreshSubscribers.forEach((callback) => callback(token));
+    refreshSubscribers = [];
+};
+
 apiClient.interceptors.request.use(
-  (config) => {
-    const token = Cookies.get('access_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    (config) => {
+        const token = localStorage.getItem('accessToken');
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
     }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
 );
 
-// Интерцептор для обработки ответов
 apiClient.interceptors.response.use(
-  (response: AxiosResponse) => {
-    return response;
-  },
-  (error) => {
-    if (error.response?.status === 401) {
-      // Удаляем токен, но НЕ редиректим автоматически
-      Cookies.remove('access_token');
-      // Только для защищенных операций редиректим на логин
-      // Анонимные пользователи могут продолжать просмотр
+    (response) => response,
+    async (error) => {
+        const originalRequest = error.config;
+
+        if (error.response?.status === 401 && !originalRequest._retry) {
+            if (isRefreshing) {
+                return new Promise((resolve) => {
+                    subscribeTokenRefresh((token) => {
+                        originalRequest.headers.Authorization = `Bearer ${token}`;
+                        resolve(axios(originalRequest));
+                    });
+                });
+            }
+
+            originalRequest._retry = true;
+            isRefreshing = true;
+
+            try {
+                const response = await axios.post(`${BASE_URL}/auth/refresh`, {}, {
+                    withCredentials: true,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const newAccessToken = response.data.accessToken;
+                localStorage.setItem('accessToken', newAccessToken);
+
+                onRrefreshed(newAccessToken);
+                isRefreshing = false;
+
+                originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+                return axios(originalRequest);
+            } catch (refreshError) {
+                isRefreshing = false;
+                localStorage.removeItem('accessToken');
+                localStorage.removeItem('user');
+                return Promise.reject(refreshError);
+            }
+        }
+
+        if (error.response?.status === 401) {
+            localStorage.removeItem('accessToken');
+        }
+        return Promise.reject(error);
     }
-    return Promise.reject(error);
-  }
 );
 
 export { apiClient };
-export default apiClient; 
+export default apiClient;
