@@ -109,6 +109,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         const basicUser: UserWithRole = {
           id: 1,
+          username: authData.username,
+          authorities: [],
           firstName: userRole === 'ADMIN' ? 'Администратор' : userRole === 'MODERATOR' ? 'Модератор' : authData.username.split('.')[0] || 'Пользователь',
           lastName: userRole === 'ADMIN' ? 'Системы' : userRole === 'MODERATOR' ? 'Модератор' : authData.username.split('.')[1] || 'Системы',
           email: authData.username,
