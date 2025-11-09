@@ -321,162 +321,194 @@ const AppBar: React.FC<AppBarProps> = ({ onMenuItemClick }) => {
                       className="card-modern animate-fade-in"
                       sx={{ 
                         mt: 1, 
-                        maxHeight: 400, 
-                        overflow: 'auto',
                         background: 'rgba(255, 255, 255, 0.95)',
                         backdropFilter: 'blur(20px)',
                         border: '1px solid rgba(255, 255, 255, 0.2)',
                         borderRadius: 3,
+                        overflow: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column',
                       }}
                     >
-                      {searchResults.departments.length > 0 && (
-                        <>
-                          <Box sx={{ p: 2, pb: 1 }}>
-                            <Typography variant="subtitle2" sx={{ 
-                              color: '#2563eb', 
-                              fontWeight: 600,
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px',
-                            }}>
-                              Департаменты
-                            </Typography>
-                          </Box>
-                          {searchResults.departments.map((department) => (
-                            <MenuItem
-                              key={`dept-${department.id}`}
-                              onClick={() => handleSearchItemClick('department', department.id)}
-                              sx={{ 
-                                display: 'flex', 
-                                alignItems: 'center',
-                                py: 1.5,
-                                px: 2,
-                                borderRadius: 2,
-                                mx: 1,
-                                mb: 0.5,
-                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                '&:hover': { 
-                                  background: 'linear-gradient(135deg, #3b82f6 0%, #38bdf8 100%)',
-                                  color: 'white',
-                                  transform: 'translateX(4px)',
-                                }
-                              }}
-                            >
-                              <Business sx={{ 
-                                mr: 2, 
-                                color: 'inherit',
-                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                              }} />
-                              <Box sx={{ flex: 1, minWidth: 0 }}>
-                                <Typography variant="body2" sx={{ 
-                                  fontWeight: 600,
-                                  wordWrap: 'break-word',
-                                  overflowWrap: 'break-word',
-                                  whiteSpace: 'normal',
-                                  lineHeight: 1.3,
-                                }}>
-                                  {department.name}
-                                </Typography>
-                                {department.tag && (
-                                  <Typography variant="caption" sx={{ 
-                                    opacity: 0.8,
-                                    fontWeight: 500,
-                                    wordWrap: 'break-word',
-                                    overflowWrap: 'break-word',
-                                    whiteSpace: 'normal',
-                                    display: 'block',
-                                  }}>
-                                    {department.tag}
-                                  </Typography>
-                                )}
-                              </Box>
-                            </MenuItem>
-                          ))}
-                        </>
-                      )}
-                      
-                      {searchResults.users.length > 0 && (
-                        <>
-                          {searchResults.departments.length > 0 && <Divider sx={{ my: 1 }} />}
-                          <Box sx={{ p: 2, pb: 1 }}>
-                            <Typography variant="subtitle2" sx={{ 
-                              color: '#2C3E50', 
-                              fontWeight: 600,
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px',
-                            }}>
-                              Сотрудники
-                            </Typography>
-                          </Box>
-                          {searchResults.users.map((user) => (
-                            <MenuItem
-                              key={`user-${user.id}`}
-                              onClick={() => handleSearchItemClick('user', user.id)}
-                              sx={{ 
-                                display: 'flex', 
-                                alignItems: 'center',
-                                py: 1.5,
-                                px: 2,
-                                borderRadius: 2,
-                                mx: 1,
-                                mb: 0.5,
-                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                '&:hover': { 
-                                  background: 'linear-gradient(135deg, #3b82f6 0%, #38bdf8 100%)',
-                                  color: 'white',
-                                  transform: 'translateX(4px)',
-                                }
-                              }}
-                            >
-                              <Avatar 
+                      <Box
+                        sx={{
+                          maxHeight: 400,
+                          overflowY: 'auto',
+                          overflowX: 'hidden',
+                          // Стили для видимого скроллбара WebKit (Chrome, Safari, Edge)
+                          '&::-webkit-scrollbar': {
+                            width: '10px',
+                            display: 'block',
+                          },
+                          '&::-webkit-scrollbar-track': {
+                            background: 'rgba(0, 0, 0, 0.05)',
+                            borderRadius: '5px',
+                            margin: '4px',
+                          },
+                          '&::-webkit-scrollbar-thumb': {
+                            background: 'rgba(0, 0, 0, 0.3)',
+                            borderRadius: '5px',
+                            border: '2px solid transparent',
+                            backgroundClip: 'padding-box',
+                            '&:hover': {
+                              background: 'rgba(0, 0, 0, 0.5)',
+                              backgroundClip: 'padding-box',
+                            },
+                          },
+                          // Для Firefox
+                          scrollbarWidth: 'thin',
+                          scrollbarColor: 'rgba(0, 0, 0, 0.3) rgba(0, 0, 0, 0.05)',
+                        }}
+                      >
+                        {searchResults.departments.length > 0 && (
+                          <>
+                            <Box sx={{ p: 2, pb: 1, position: 'sticky', top: 0, background: 'rgba(255, 255, 255, 0.95)', zIndex: 1, borderBottom: '1px solid rgba(0, 0, 0, 0.05)' }}>
+                              <Typography variant="subtitle2" sx={{ 
+                                color: '#2563eb', 
+                                fontWeight: 600,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px',
+                              }}>
+                                Департаменты
+                              </Typography>
+                            </Box>
+                            {searchResults.departments.map((department) => (
+                              <MenuItem
+                                key={`dept-${department.id}`}
+                                onClick={() => handleSearchItemClick('department', department.id)}
                                 sx={{ 
-                                  mr: 2, 
-                                  width: 32, 
-                                  height: 32, 
-                                  fontSize: '0.875rem',
-                                  background: '#2C3E50',
-                                  color: 'white',
-                                  fontWeight: 600,
-                                  boxShadow: '0 4px 12px rgba(44, 62, 80, 0.3)',
+                                  display: 'flex', 
+                                  alignItems: 'center',
+                                  py: 1.5,
+                                  px: 2,
+                                  borderRadius: 2,
+                                  mx: 1,
+                                  mb: 0.5,
+                                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                  '&:hover': { 
+                                    background: 'linear-gradient(135deg, #3b82f6 0%, #38bdf8 100%)',
+                                    color: 'white',
+                                    transform: 'translateX(4px)',
+                                  }
                                 }}
                               >
-                                {user.firstName?.charAt(0)}{user.lastName?.charAt(0)}
-                              </Avatar>
-                              <Box sx={{ flex: 1, minWidth: 0 }}>
-                                <Typography variant="body2" sx={{ 
-                                  fontWeight: 600,
-                                  wordWrap: 'break-word',
-                                  overflowWrap: 'break-word',
-                                  whiteSpace: 'normal',
-                                  lineHeight: 1.3,
-                                }}>
-                                  {[user.lastName, user.firstName, user.middleName].filter(Boolean).join(' ')}
-                                </Typography>
-                                <Typography 
-                                  variant="caption" 
-                                  component="a"
-                                  href={`mailto:${user.email}`}
-                                  sx={{ 
-                                    opacity: 0.8,
-                                    fontWeight: 500,
-                                    textDecoration: 'none',
-                                    color: 'inherit',
+                                <Business sx={{ 
+                                  mr: 2, 
+                                  color: 'inherit',
+                                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                }} />
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                  <Typography variant="body2" sx={{ 
+                                    fontWeight: 600,
                                     wordWrap: 'break-word',
                                     overflowWrap: 'break-word',
                                     whiteSpace: 'normal',
-                                    display: 'block',
-                                    '&:hover': {
-                                      color: 'primary.main',
-                                      cursor: 'pointer'
-                                    }
+                                    lineHeight: 1.3,
+                                  }}>
+                                    {department.name}
+                                  </Typography>
+                                  {department.tag && (
+                                    <Typography variant="caption" sx={{ 
+                                      opacity: 0.8,
+                                      fontWeight: 500,
+                                      wordWrap: 'break-word',
+                                      overflowWrap: 'break-word',
+                                      whiteSpace: 'normal',
+                                      display: 'block',
+                                    }}>
+                                      {department.tag}
+                                    </Typography>
+                                  )}
+                                </Box>
+                              </MenuItem>
+                            ))}
+                          </>
+                        )}
+                        
+                        {searchResults.users.length > 0 && (
+                          <>
+                            {searchResults.departments.length > 0 && <Divider sx={{ my: 1 }} />}
+                            <Box sx={{ p: 2, pb: 1, position: 'sticky', top: 0, background: 'rgba(255, 255, 255, 0.95)', zIndex: 1, borderBottom: '1px solid rgba(0, 0, 0, 0.05)' }}>
+                              <Typography variant="subtitle2" sx={{ 
+                                color: '#2C3E50', 
+                                fontWeight: 600,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px',
+                              }}>
+                                Сотрудники
+                              </Typography>
+                            </Box>
+                            {searchResults.users.map((user) => (
+                              <MenuItem
+                                key={`user-${user.id}`}
+                                onClick={() => handleSearchItemClick('user', user.id)}
+                                sx={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center',
+                                  py: 1.5,
+                                  px: 2,
+                                  borderRadius: 2,
+                                  mx: 1,
+                                  mb: 0.5,
+                                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                  '&:hover': { 
+                                    background: 'linear-gradient(135deg, #3b82f6 0%, #38bdf8 100%)',
+                                    color: 'white',
+                                    transform: 'translateX(4px)',
+                                  }
+                                }}
+                              >
+                                <Avatar 
+                                  sx={{ 
+                                    mr: 2, 
+                                    width: 32, 
+                                    height: 32, 
+                                    fontSize: '0.875rem',
+                                    background: '#2C3E50',
+                                    color: 'white',
+                                    fontWeight: 600,
+                                    boxShadow: '0 4px 12px rgba(44, 62, 80, 0.3)',
                                   }}
                                 >
-                                  {user.email}
-                                </Typography>
-                              </Box>
-                            </MenuItem>
-                          ))}
-                        </>
-                      )}
+                                  {user.firstName?.charAt(0)}{user.lastName?.charAt(0)}
+                                </Avatar>
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                  <Typography variant="body2" sx={{ 
+                                    fontWeight: 600,
+                                    wordWrap: 'break-word',
+                                    overflowWrap: 'break-word',
+                                    whiteSpace: 'normal',
+                                    lineHeight: 1.3,
+                                  }}>
+                                    {[user.lastName, user.firstName, user.middleName].filter(Boolean).join(' ')}
+                                  </Typography>
+                                  <Typography 
+                                    variant="caption" 
+                                    component="a"
+                                    href={`mailto:${user.email}`}
+                                    sx={{ 
+                                      opacity: 0.8,
+                                      fontWeight: 500,
+                                      textDecoration: 'none',
+                                      color: 'inherit',
+                                      wordWrap: 'break-word',
+                                      overflowWrap: 'break-word',
+                                      whiteSpace: 'normal',
+                                      display: 'block',
+                                      '&:hover': {
+                                        color: 'primary.main',
+                                        cursor: 'pointer'
+                                      }
+                                    }}
+                                  >
+                                    {user.email}
+                                  </Typography>
+                                </Box>
+                              </MenuItem>
+                            ))}
+                          </>
+                        )}
+                      </Box>
                     </Paper>
                   </Popper>
                 </Box>
